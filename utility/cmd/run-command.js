@@ -1,14 +1,16 @@
-import { execFile } from 'child_process';
+const { execFile } = require('child_process');
 
-export function runCommand(file, args) {
-	return new Promise((resolve, reject) => {
-		execFile(file, args, (error, stdout, stderr) => {
-			if (error) {
-				reject(new Error(stderr || stdout || error.message));
-			}
-			else {
-				resolve(stdout.trim());
-			}
+module.exports = {
+	runCommand(file, args) {
+		return new Promise((resolve, reject) => {
+			execFile(file, args, (error, stdout, stderr) => {
+				if (error) {
+					reject(new Error(stderr || stdout || error.message));
+				}
+				else {
+					resolve(stdout.trim());
+				}
+			});
 		});
-	});
-}
+	},
+};
