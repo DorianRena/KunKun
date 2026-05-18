@@ -74,7 +74,7 @@ function fetchGitHubRepo(repo) {
 
 			res.on('end', () => {
 				if (res.statusCode === 404) {
-					reject(new Error('Repository non trouvé'));
+					reject(new Error('Repository non trouvé, ce repository est peut-être privé'));
 				}
 				else if (res.statusCode === 200) {
 					try {
