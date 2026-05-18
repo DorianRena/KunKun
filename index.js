@@ -2,7 +2,19 @@
 const { Client, Collection, Events, GatewayIntentBits, MessageFlags } = require('discord.js');
 const path = require('node:path');
 const fs = require('fs');
-const token = process.env.DISCORD_TOKEN;
+const { ensureSonarServer } = require('./utility/docker/sonar-server');
+const config = require('./config');
+
+// Validate required configuration at startup
+try {
+	config.validate();
+}
+catch (err) {
+	console.error('[Config] Configuration validation failed:', err.message);
+	process.exit(1);
+}
+
+const token = config.discord.token;
 
 // Create a new client instance
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
@@ -62,4 +74,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 // Log in to Discord with your client's token
-client.login(token);
+// Start SonarQube server container (if configured)
+(async () => {
+	try {
+		const info = await ensureSonarServer();
+		console.log(`[Sonar] Server container ready: ${info.host}`);
+	}
+	catch (err) {
+		console.error('[Sonar][Server] Failed to ensure Sonar server:', err.message || err);
+		// continue without blocking the bot
+	}
+	// Log in to Discord with your client's token
+	client.login(token);
+})();
