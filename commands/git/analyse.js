@@ -1,8 +1,11 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { gitClone } = require('../../utility/docker/git-clone');
-const { sonarAnalyze } = require('../../utility/docker/sonar-analyze');
-const { semgrepAnalyze } = require('../../utility/docker/semgrep-analyze');
+const { sonarAnalyze } = require('../../utility/docker/sonar-analyse');
+const { semgrepAnalyze } = require('../../utility/docker/semgrep-analyse');
 const { repoUrlToProjectKey } = require('../../utility/git/repo-utils');
+const { fetchProjectMetricsWithRetry } = require('../../utility/sonar/sonar-api');
+const { formatSonarReport } = require('../../utility/sonar/report-formatter');
+const { formatSemgrepReport } = require('../../utility/semgrep/report-formatter');
 const { validateRepoUrl, validateBranch } = require('../../utility/git/valid-url');
 
 module.exports = {
@@ -12,7 +15,6 @@ module.exports = {
 		.addStringOption((option) => option.setName('url').setDescription('The GitHub repository URL to analyse.').setRequired(true))
 		.addStringOption((option) => option.setName('branch').setDescription('Optional branch to analyse (e.g. main)')),
 	async execute(interaction) {
-
 		const repoUrl = interaction.options.getString('url');
 		const branch = interaction.options.getString('branch');
 		// Validation de l'URL
@@ -41,29 +43,45 @@ module.exports = {
 
 			// Génération d'une projectKey à partir de l'URL du repo pour conserver l'historique Sonar
 			const projectKey = repoUrlToProjectKey(repoUrl, branch);
+			const embeds = [];
+
 			await interaction.editReply('Analyse Sonar en cours...');
-			await sonarAnalyze(volumeId, { projectKey, projectName: projectKey });
-			await interaction.editReply('Analyse Sonar terminée !');
+			await sonarAnalyze(volumeId, { projectKey, projectName: projectKey, branch });
+			await interaction.editReply('Récupération des résultats Sonar...');
+
+			// Fetch metrics from Sonar API (with retry)
+			try {
+				const metrics = await fetchProjectMetricsWithRetry(projectKey, 5, 2000);
+				if (metrics) {
+					const embed = formatSonarReport(metrics, projectKey, repoUrl);
+					embeds.push(embed);
+					await interaction.editReply({ content: '', embeds });
+					console.log(`[Analysis] Sonar report generated for project ${projectKey}`);
+				}
+				else {
+					await interaction.editReply('✅ Analyse Sonar terminée ! (résultats non encore disponibles, réessayez dans quelques secondes)');
+				}
+			}
+			catch (apiErr) {
+				console.error('[Analysis] Failed to fetch metrics:', apiErr.message);
+				await interaction.editReply('✅ Analyse Sonar terminée ! (impossible de récupérer les résultats)');
+			}
 
 			await interaction.editReply('Analyse Semgrep en cours...');
-			await semgrepAnalyze(volumeId, { config: 'p/owasp-top-ten' });
-			await interaction.editReply('Analyse Semgrep terminée !');
-
-			/*
-               Exemple de ce que tu pourras faire à la prochaine étape dans ton code :
-
-               await runCommand('docker', [
-                   'run', '--rm',
-                   '-v', `${uniqueId}:/src`,
-                   'ton-image-analyse',
-                   'commande-analyse', '/src'
-               ]);
-            */
-
+			try {
+				const semgrepOutput = await semgrepAnalyze(volumeId, { config: 'p/owasp-top-ten' });
+				const embed = formatSemgrepReport(semgrepOutput, repoUrl);
+				embeds.push(embed);
+				await interaction.editReply({ content: '', embeds });
+				console.log('[Analysis] Semgrep report generated');
+			}
+			catch (semgrepErr) {
+				console.error('[Analysis] Failed to run Semgrep:', semgrepErr.message);
+			}
 		}
 		catch (err) {
 			console.error(err);
-			await interaction.editReply(`Erreur lors du clonage dans le conteneur : \`${err.message}\``);
+			await interaction.editReply(`Erreur lors de l'analyse : \`${err.message}\``);
 		}
 	},
 };

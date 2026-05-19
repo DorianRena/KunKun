@@ -2,8 +2,8 @@
 const { Client, Collection, Events, GatewayIntentBits, MessageFlags } = require('discord.js');
 const path = require('node:path');
 const fs = require('fs');
-const { ensureSonarServer } = require('./utility/docker/sonar-server');
 const config = require('./config');
+const { setup } = require('./utility/docker/init');
 
 // Validate required configuration at startup
 try {
@@ -77,8 +77,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
 // Start SonarQube server container (if configured)
 (async () => {
 	try {
-		const info = await ensureSonarServer();
-		console.log(`[Sonar] Server container ready: ${info.host}`);
+		console.log('[Sonar] Starting the serveur ...');
+		await setup();
+		console.log('[Sonar] Server container ready: http://localhost:9000');
 	}
 	catch (err) {
 		console.error('[Sonar][Server] Failed to ensure Sonar server:', err.message || err);
