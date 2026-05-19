@@ -45,11 +45,10 @@ module.exports = {
 			}
 
 			console.log(`[Semgrep][Analyze] Analysis finished for volume ${volumeId}`);
-			// console.log(output);
 			return output;
 		}
 		catch (err) {
-			const msg = (err && err.message) ? err.message : String(err);
+			const msg = err?.message ?? String(err);
 			console.error(`[Semgrep][Analyze] Error for volume ${volumeId}:`, msg);
 
 			throw err;

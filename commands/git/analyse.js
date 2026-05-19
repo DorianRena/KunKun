@@ -3,6 +3,7 @@ const { gitClone } = require('../../utility/docker/git-clone');
 const { sonarAnalyze } = require('../../utility/docker/sonar-analyze');
 const { semgrepAnalyze } = require('../../utility/docker/semgrep-analyze');
 const { repoUrlToProjectKey } = require('../../utility/git/repo-utils');
+const { validateRepoUrl, validateBranch } = require('../../utility/git/valid-url');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -11,16 +12,26 @@ module.exports = {
 		.addStringOption((option) => option.setName('url').setDescription('The GitHub repository URL to analyse.').setRequired(true))
 		.addStringOption((option) => option.setName('branch').setDescription('Optional branch to analyse (e.g. main)')),
 	async execute(interaction) {
+
 		const repoUrl = interaction.options.getString('url');
 		const branch = interaction.options.getString('branch');
-		const githubRegex = /^https:\/\/github\.com\/[\w-]+\/[\w.-]+$/;
-		if (!/^[\w\-./]+$/.test(branch)) {
-			throw new Error('Nom de branche invalide');
+		// Validation de l'URL
+		const urlValidation = validateRepoUrl(repoUrl);
+		if (!urlValidation.isValid) {
+			return await interaction.reply({
+				content: `Erreur : ${urlValidation.error}`,
+				ephemeral: true,
+			});
+		}
+		// Validation de la branche
+		const branchValidation = validateBranch(branch);
+		if (!branchValidation.isValid) {
+			return await interaction.reply({
+				content: `Erreur : ${branchValidation.error}`,
+				ephemeral: true,
+			});
 		}
 
-		if (!githubRegex.test(repoUrl.replace(/.git$/, ''))) {
-			return await interaction.reply({ content: 'URL GitHub invalide. Merci de fournir un lien HTTPS public valide', ephemeral: true });
-		}
 		await interaction.deferReply();
 
 		try {
