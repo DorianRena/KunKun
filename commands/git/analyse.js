@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { gitClone } = require('../../utility/docker/git-clone');
 const { sonarAnalyze } = require('../../utility/docker/sonar-analyze');
+const { semgrepAnalyze } = require('../../utility/docker/semgrep-analyze');
 const { repoUrlToProjectKey } = require('../../utility/git/repo-utils');
 
 module.exports = {
@@ -29,9 +30,13 @@ module.exports = {
 
 			// Génération d'une projectKey à partir de l'URL du repo pour conserver l'historique Sonar
 			const projectKey = repoUrlToProjectKey(repoUrl, branch);
-			await interaction.editReply('Analyse du repo en cours...');
-			await sonarAnalyze(volumeId, { projectKey, projectName: projectKey, branch });
-			await interaction.editReply('Analyse du repo fini!');
+			await interaction.editReply('Analyse Sonar en cours...');
+			await sonarAnalyze(volumeId, { projectKey, projectName: projectKey });
+			await interaction.editReply('Analyse Sonar terminée !');
+
+			await interaction.editReply('Analyse Semgrep en cours...');
+			await semgrepAnalyze(volumeId, { config: 'p/owasp-top-ten' });
+			await interaction.editReply('Analyse Semgrep terminée !');
 
 			/*
                Exemple de ce que tu pourras faire à la prochaine étape dans ton code :

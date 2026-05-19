@@ -15,7 +15,6 @@ module.exports = {
 		const id = uniqueId();
 		const projectKey = opts.projectKey || `project_${volumeId}_${id}`;
 		const projectName = opts.projectName || projectKey;
-		const branch = opts.branch; // optional branch name
 
 		// Get Sonar configuration (smart defaults for Docker context)
 		const sonarHost = config.sonar.scanner.hostUrl;
