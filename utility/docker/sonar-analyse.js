@@ -5,7 +5,7 @@ const config = require('../../config');
 const docker = new Docker();
 
 module.exports = {
-	async sonarAnalyze(volumeId, opts = {}) {
+	async sonarAnalyse(volumeId, opts = {}) {
 		const id = uniqueId();
 		const projectKey = opts.projectKey || `project_${volumeId}_${id}`;
 		const projectName = opts.projectName || projectKey;
