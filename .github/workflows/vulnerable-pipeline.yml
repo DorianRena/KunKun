@@ -2,9 +2,9 @@ name: Vulnerable CI Pipeline
 
 on:
   push:
-    branches: [ vulnerable ]
+    branches: [ pipeline ]
   pull_request:
-    branches: [ vulnerable ]
+    branches: [ pipeline ]
 
 jobs:
   build:
