@@ -18,6 +18,9 @@ module.exports = {
 			token: process.env.SONAR_TOKEN,
 		},
 	},
+	docker: {
+		stopContainersOnShutdown: process.env.DOCKER_STOP_CONTAINERS_ON_SHUTDOWN !== 'false',
+	},
 	/**
 	 * Validate required configuration
 	 * @throws {Error} If required env vars are missing

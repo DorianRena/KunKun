@@ -1,10 +1,10 @@
 const Docker = require('dockerode');
-const { PassThrough } = require('stream');
+const { PassThrough } = require('node:stream');
 
 const docker = new Docker();
 
 module.exports = {
-	async semgrepAnalyze(volumeId, opts = {}) {
+	async semgrepAnalyse(volumeId, opts = {}) {
 		const configRule = opts.config || 'p/owasp-top-ten';
 		const outputFile = opts.outputFile || null;
 
