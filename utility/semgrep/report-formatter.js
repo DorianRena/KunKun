@@ -49,9 +49,11 @@ module.exports = {
 		let embedColor = 0x00FF00; // GREEN (aucun problème)
 		if (hasCritical) {
 			embedColor = 0xFF0000; // RED
-		} else if (hasHigh) {
+		}
+		else if (hasHigh) {
 			embedColor = 0xFF6600; // ORANGE
-		} else if (severities.MEDIUM > 0) {
+		}
+		else if (severities.MEDIUM > 0) {
 			embedColor = 0xFFFF00; // YELLOW
 		}
 
@@ -97,7 +99,8 @@ module.exports = {
 				name: '⚠️ Erreurs',
 				value: errors.slice(0, 5).map(e => `• ${e.message || e}`).join('\n') || 'Erreurs non spécifiées',
 			});
-		} else {
+		}
+		else {
 			embed.addFields({
 				name: '✅ Statut',
 				value: 'Pas d\'erreurs lors de l\'analyse',

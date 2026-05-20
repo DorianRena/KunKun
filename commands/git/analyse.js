@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { gitClone } = require('../../utility/docker/git-clone');
 const { sonarAnalyze } = require('../../utility/docker/sonar-analyse');
 const { semgrepAnalyze } = require('../../utility/docker/semgrep-analyse');
@@ -7,6 +7,8 @@ const { fetchProjectMetricsWithRetry } = require('../../utility/sonar/sonar-api'
 const { formatSonarReport } = require('../../utility/sonar/report-formatter');
 const { formatSemgrepReport } = require('../../utility/semgrep/report-formatter');
 const { validateRepoUrl, validateBranch } = require('../../utility/git/valid-url');
+const { trufflehogAnalyze } = require('../../utility/docker/trufflehog-analyse');
+const { formatTrufflehogReport } = require('../../utility/trufflehog/report-formatter');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -78,6 +80,20 @@ module.exports = {
 			catch (semgrepErr) {
 				console.error('[Analysis] Failed to run Semgrep:', semgrepErr.message);
 			}
+
+			await interaction.editReply('Analyse des secrets en cours (TruffleHog)...');
+			try {
+				const findings = await trufflehogAnalyze(volumeId, repoUrl);
+				const embed = formatTrufflehogReport(findings, repoUrl);
+				embeds.push(embed);
+				await interaction.editReply({ content: '', embeds });
+				console.log(`[Analysis] TruffleHog: ${findings.length} finding(s)`);
+			}
+			catch (thErr) {
+				console.error('[Analysis] TruffleHog failed:', thErr.message);
+				await interaction.editReply({ content: '⚠️ TruffleHog n\'a pas pu s\'exécuter.', embeds });
+			}
+
 		}
 		catch (err) {
 			console.error(err);
