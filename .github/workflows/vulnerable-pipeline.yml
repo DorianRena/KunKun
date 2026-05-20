@@ -1,0 +1,88 @@
+name: Vulnerable CI Pipeline
+
+on:
+  push:
+    branches: [ pipeline ]
+  pull_request:
+    branches: [ pipeline ]
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target URL'
+        required: false
+        default: 'https://example.com'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts || true
+
+      # ❌ Secret hardcodé dans les variables d'env
+      - name: Configure application
+        run: echo "Configuration loaded"
+        env:
+          AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
+          AWS_SECRET_ACCESS_KEY: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+          STRIPE_SECRET_KEY: sk_live_4eC39HqLyjWDarjtT1zdp7dc
+          GITHUB_TOKEN: ghp_16C7e42F292c6912E7710c838347Ae298V5
+          DATABASE_URL: mongodb://admin:SuperSecret123@prod-db.example.com:27017/app
+          JWT_SECRET: myjwtsecretisveryweak123
+          SENDGRID_API_KEY: SG.aBcDeFgHiJkLmNoPqRsTuVwX.yZaBcDeFgHiJkLmNoPqRsTuVwXyZaBcDeFgH
+
+      # ❌ Secret affiché dans les logs
+      - name: Debug config
+        run: |
+          echo "Connecting to DB: mongodb://admin:SuperSecret123@prod-db.example.com:27017/app"
+          echo "Using AWS key: AKIAIOSFODNN7EXAMPLE"
+          echo "API Token: Bearer ghp_16C7e42F292c6912E7710c838347Ae298V5"
+
+      # ❌ Injection de commande via variable non sanitisée
+      - name: Run tests
+        run: |
+          TARGET_URL="${{ github.event.inputs.target_url || 'https://example.com' }}"
+          echo "Testing against: $TARGET_URL"
+          curl -s -o /dev/null "$TARGET_URL" || true
+
+      # ❌ Artefact contenant des secrets
+      - name: Build
+        run: |
+          echo "AWS_KEY=AKIAIOSFODNN7EXAMPLE" > .env.production
+          echo "DB_PASS=SuperSecret123" >> .env.production
+          echo "STRIPE_KEY=sk_live_4eC39HqLyjWDarjtT1zdp7dc" >> .env.production
+          mkdir -p dist
+          echo "build OK" > dist/index.html
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: |
+            dist/
+            .env.production
+
+      # ❌ Docker login avec credentials en clair
+      - name: Push Docker image
+        run: |
+          echo "docker login -u monuser -p MonMotDePasseDocker123 registry.example.com"
+          echo "Skipping actual push in CI"
+
+      # ❌ SSH key hardcodée dans le script
+      - name: Deploy
+        run: |
+          mkdir -p ~/.ssh
+          echo "-----BEGIN RSA PRIVATE KEY-----
+          MIICXgIBAAKBgQCfn8uP4FuHaaAPrMkc4o3zf8BGBkNf6p2HrlFPMgrHvDMB
+          -----END RSA PRIVATE KEY-----" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          echo "Deploy step completed (SSH skipped in CI)"

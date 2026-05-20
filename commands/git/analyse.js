@@ -1,10 +1,13 @@
 const { SlashCommandBuilder } = require('discord.js');
+const config = require('../../config');
 const { gitClone } = require('../../utility/docker/git-clone');
 const { repoUrlToProjectKey } = require('../../utility/git/repo-utils');
 const { validateRepoUrl, validateBranch } = require('../../utility/git/valid-url');
-const sonar = require('../../utility/sonar/analyse');
-const semgrep = require('../../utility/semgrep/analyse');
-const trufflehog = require('../../utility/trufflehog/analyse');
+const { trufflehogAnalyze } = require('../../utility/docker/trufflehog-analyse');
+const { formatTrufflehogReport } = require('../../utility/trufflehog/report-formatter');
+const { fetchGithubPipelineLogs } = require('../../utility/git/pipeline-logs');
+const { scanPipelineLogs } = require('../../utility/pipeline/secret-scanner');
+const { formatPipelineReport } = require('../../utility/pipeline/report-formatter');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -42,9 +45,19 @@ module.exports = {
 			// Génération d'une projectKey à partir de l'URL du repo pour conserver l'historique Sonar
 			const projectKey = repoUrlToProjectKey(repoUrl, branch);
 
-			await sonar.analyse(interaction, volumeId, projectKey, repoUrl);
-			await semgrep.analyse(interaction, volumeId, repoUrl);
-			await trufflehog.analyse(interaction, volumeId, repoUrl);
+			await interaction.editReply('🔧 Analyse des logs de pipeline en cours...');
+			try {
+				const pipelineData = await fetchGithubPipelineLogs(repoUrl, config.github.token);
+				const scanResult = scanPipelineLogs(pipelineData);
+				const embed = formatPipelineReport(scanResult, repoUrl);
+				embeds.push(embed);
+				await interaction.editReply({ content: '', embeds });
+			}
+			catch (pipeErr) {
+				console.error('[Pipeline] Failed:', pipeErr.message);
+				console.error(pipeErr.stack);
+			}
+
 		}
 		catch (err) {
 			console.error(err);

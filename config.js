@@ -33,4 +33,7 @@ module.exports = {
 			throw new Error('Missing required env var: SONAR_TOKEN');
 		}
 	},
+	github: {
+		token: process.env.GITHUB_TOKEN || null,
+	},
 };
