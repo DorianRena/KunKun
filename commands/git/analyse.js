@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 const { gitClone } = require('../../utility/docker/git-clone');
 const { sonarAnalyze } = require('../../utility/docker/sonar-analyse');
 const { semgrepAnalyze } = require('../../utility/docker/semgrep-analyse');
@@ -9,6 +9,9 @@ const { formatSemgrepReport } = require('../../utility/semgrep/report-formatter'
 const { validateRepoUrl, validateBranch } = require('../../utility/git/valid-url');
 const { trufflehogAnalyze } = require('../../utility/docker/trufflehog-analyse');
 const { formatTrufflehogReport } = require('../../utility/trufflehog/report-formatter');
+const { fetchGithubPipelineLogs } = require('../../utility/git/pipeline-logs');
+const { scanPipelineLogs } = require('../../utility/pipeline/secret-scanner');
+const { formatPipelineReport } = require('../../utility/pipeline/report-formatter');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -92,6 +95,18 @@ module.exports = {
 			catch (thErr) {
 				console.error('[Analysis] TruffleHog failed:', thErr.message);
 				await interaction.editReply({ content: '⚠️ TruffleHog n\'a pas pu s\'exécuter.', embeds });
+			}
+
+			await interaction.editReply('Analyse des logs de pipeline en cours...');
+			try {
+				const pipelineData = await fetchGithubPipelineLogs(repoUrl);
+				const scanResult = scanPipelineLogs(pipelineData);
+				const embed = formatPipelineReport(scanResult, repoUrl);
+				embeds.push(embed);
+				await interaction.editReply({ content: '', embeds });
+			}
+			catch (pipeErr) {
+				console.error('[Analysis] Pipeline scan failed:', pipeErr.message);
 			}
 
 		}
