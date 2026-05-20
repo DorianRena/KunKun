@@ -24,19 +24,21 @@ function scanPipelineLogs(pipelineData) {
 
 	for (const run of pipelineData.runs) {
 		for (const job of run.jobs) {
-			for (const pattern of SECRET_PATTERNS) {
-				const matches = [...(job.logs.matchAll(pattern.regex) || [])];
-				for (const match of matches) {
-					findings.push({
-						secretType: pattern.name,
-						runName:    run.name,
-						runId:      run.id,
-						jobName:    job.name,
-						// On masque la valeur pour ne pas la logger en clair
-						preview:    match[0].slice(0, 6) + '***',
-					});
+			const lines = job.logs.split('\n');
+			lines.forEach((line, index) => {
+				for (const pattern of SECRET_PATTERNS) {
+					const matches = [...(line.matchAll(pattern.regex) || [])];
+					for (const match of matches) {
+						findings.push({
+							secretType: pattern.name,
+							runName:    run.name,
+							jobName:    job.name,
+							line:       index + 1,
+							preview:    match[0].slice(0, 6) + '***',
+						});
+					}
 				}
-			}
+			});
 		}
 	}
 

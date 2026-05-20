@@ -1,4 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
+const config = require('../../config');
 const { gitClone } = require('../../utility/docker/git-clone');
 const { sonarAnalyze } = require('../../utility/docker/sonar-analyse');
 const { semgrepAnalyze } = require('../../utility/docker/semgrep-analyse');
@@ -97,16 +98,17 @@ module.exports = {
 				await interaction.editReply({ content: '⚠️ TruffleHog n\'a pas pu s\'exécuter.', embeds });
 			}
 
-			await interaction.editReply('Analyse des logs de pipeline en cours...');
+			await interaction.editReply('🔧 Analyse des logs de pipeline en cours...');
 			try {
-				const pipelineData = await fetchGithubPipelineLogs(repoUrl);
+				const pipelineData = await fetchGithubPipelineLogs(repoUrl, config.github.token);
 				const scanResult = scanPipelineLogs(pipelineData);
 				const embed = formatPipelineReport(scanResult, repoUrl);
 				embeds.push(embed);
 				await interaction.editReply({ content: '', embeds });
 			}
 			catch (pipeErr) {
-				console.error('[Analysis] Pipeline scan failed:', pipeErr.message);
+				console.error('[Pipeline] Failed:', pipeErr.message);
+				console.error(pipeErr.stack);
 			}
 
 		}
