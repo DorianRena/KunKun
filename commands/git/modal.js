@@ -12,6 +12,9 @@ const { gitClone } = require('../../utility/docker/git-clone');
 const { repoUrlToProjectKey } = require('../../utility/git/repo-utils');
 const sonar = require('../../utility/sonar/analyse');
 const semgrep = require('../../utility/semgrep/analyse');
+const trufflehog = require('../../utility/trufflehog/analyse');
+const pipeline = require('../../utility/pipeline/analyse');
+const config = require('../../config');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -48,7 +51,7 @@ module.exports = {
 			.setPlaceholder('Choisir les analyses')
 			.setRequired(true)
 			.setMinValues(1)
-			.setMaxValues(2)
+			.setMaxValues(4)
 			.addOptions(
 				new StringSelectMenuOptionBuilder()
 					.setLabel('Sonar')
@@ -59,6 +62,16 @@ module.exports = {
 					.setLabel('Semgrep')
 					.setDescription('Analyse de sécurité OWASP')
 					.setValue('semgrep')
+					.setDefault(true),
+				new StringSelectMenuOptionBuilder()
+					.setLabel('Trufflehog')
+					.setDescription('Analyse des secrets')
+					.setValue('trufflehog')
+					.setDefault(true),
+				new StringSelectMenuOptionBuilder()
+					.setLabel('Pipeline')
+					.setDescription('Analyse des secrets dans les logs des pipelines')
+					.setValue('pipeline')
 					.setDefault(true),
 			);
 
@@ -82,6 +95,8 @@ module.exports = {
 
 		const runSonar = analyses.includes('sonar');
 		const runSemgrep = analyses.includes('semgrep');
+		const runTrufflehog = analyses.includes('trufflehog');
+		const runPipeline = analyses.includes('pipeline');
 		// Validations
 		const urlValidation = validateRepoUrl(repoUrl);
 		if (!urlValidation.isValid) {
@@ -103,6 +118,8 @@ module.exports = {
 
 			if (runSonar) await sonar.analyse(interaction, volumeId, projectKey, repoUrl);
 			if (runSemgrep) await semgrep.analyse(interaction, volumeId, repoUrl);
+			if (runTrufflehog) await trufflehog.analyse(interaction, volumeId, repoUrl);
+			if (runPipeline) await pipeline.analyse(interaction, volumeId, repoUrl, config.github.token);
 		}
 		catch (err) {
 			console.error(err);
