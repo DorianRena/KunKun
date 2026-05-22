@@ -7,6 +7,8 @@ const sonar = require('../../utility/sonar/analyse');
 const semgrep = require('../../utility/semgrep/analyse');
 const trufflehog = require('../../utility/trufflehog/analyse');
 const pipeline = require('../../utility/pipeline/analyse');
+const { generateSonarPdfReport } = require('../../utility/pdf/sonar-report-generator');
+const { sendWithPdfButton } = require('../../utility/pdf/pdf-button');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -44,10 +46,23 @@ module.exports = {
 			// Génération d'une projectKey à partir de l'URL du repo pour conserver l'historique Sonar
 			const projectKey = repoUrlToProjectKey(repoUrl, branch);
 
+			// Les analyses écrivent leurs embeds directement sur le message via editReply —
+			// on les exécute séquentiellement pour que les embeds s'accumulent dans l'ordre.
 			await sonar.analyse(interaction, volumeId, projectKey, repoUrl);
-			await semgrep.analyse(interaction, volumeId, repoUrl);
-			await trufflehog.analyse(interaction, volumeId, repoUrl);
-			await pipeline.analyse(interaction, volumeId, repoUrl, config.github.token);
+			// await semgrep.analyse(interaction, volumeId, repoUrl);
+			// await trufflehog.analyse(interaction, volumeId, repoUrl);
+			// await pipeline.analyse(interaction, volumeId, repoUrl, config.github.token);
+
+			// Génération du rapport PDF
+			await interaction.editReply({ content: 'Génération du rapport PDF...', components: [] });
+			const report = await generateSonarPdfReport(projectKey);
+
+			// Récupération des embeds tels qu'ils ont été posés par les analyses
+			const message = await interaction.fetchReply();
+			const existingEmbeds = message.embeds;
+
+			// Envoi final : embeds existants + bouton de téléchargement
+			await sendWithPdfButton(interaction, report, existingEmbeds);
 
 		}
 		catch (err) {

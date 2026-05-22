@@ -1,5 +1,6 @@
 const Docker = require('dockerode');
 const docker = new Docker();
+const path = require('path');
 
 const util = {
 	async pullImage(image) {
@@ -40,6 +41,52 @@ const util = {
 			}
 		}
 	},
+
+	async ensureBuiltImage(imageName, dockerfilePath) {
+		try {
+			await docker.getImage(imageName).inspect();
+			console.info(`[Docker] Built image ${imageName} already exists`);
+		}
+		catch (err) {
+			if (err.statusCode === 404) {
+				console.info(`[Docker] Building local image ${imageName} from ${dockerfilePath}...`);
+
+				const dockerfileDir = path.dirname(path.resolve(dockerfilePath));
+				const dockerfileName = path.basename(dockerfilePath);
+
+				// Dockerode a besoin d'un tar des fichiers du contexte de build
+				const tar = require('tar-fs');
+				const pack = tar.pack(dockerfileDir, {
+					entries: [dockerfileName],
+				});
+
+				await new Promise((resolve, reject) => {
+					docker.buildImage(pack, { t: imageName, dockerfile: dockerfileName }, (err, stream) => {
+						if (err) return reject(err);
+						docker.modem.followProgress(
+							stream,
+							(err, res) => {
+								if (err) {reject(err);}
+								else {
+									console.info(`[Docker] Image ${imageName} built successfully`);
+									resolve(res);
+								}
+							},
+							(event) => {
+								if (event.stream) {
+									process.stdout.write(`[Docker Build] ${event.stream}`);
+								}
+							},
+						);
+					});
+				});
+			}
+			else {
+				throw err;
+			}
+		}
+	},
+
 	async getOrCreateContainer(config) {
 		try {
 			const container = docker.getContainer(config.name);
@@ -184,6 +231,8 @@ const util = {
 		await util.ensureImage('semgrep/semgrep');
 		await util.ensureImage('sonarsource/sonar-scanner-cli');
 		await util.ensureImage('trufflesecurity/trufflehog');
+		await util.ensureImage('linuxserver/libreoffice');
+		await util.ensureBuiltImage('ecplise-21-libreoffice', './tools/Dockerfile');
 
 		await util.waitForHealthy(containerSonar, { timeout: 120_000, interval: 10000 });
 
@@ -219,7 +268,7 @@ const util = {
 				}
 			}
 
-			console('[Docker] Infrastructure cleaned up');
+			console.info('[Docker] Infrastructure cleaned up');
 		}
 		catch (err) {
 			console.error('[Docker] Error during teardown:', err.message);

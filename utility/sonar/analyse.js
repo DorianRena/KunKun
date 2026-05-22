@@ -11,6 +11,7 @@ module.exports = {
 		catch (sonarErr) {
 			console.error('[Analysis] Sonar failed:', sonarErr.message);
 			await interaction.editReply({ content: '⚠️ Sonar n\'a pas pu s\'exécuter.' });
+			return null;
 		}
 		// Fetch metrics from Sonar API (with retry)
 		await interaction.editReply('Récupération des résultats Sonar...');
@@ -21,10 +22,12 @@ module.exports = {
 				const message = await interaction.fetchReply();
 				await interaction.editReply({ content: '', embeds: [...message.embeds, embed] });
 				console.log(`[Analysis] Sonar report generated for project ${projectKey}`);
+				return metrics;
 			}
 			else {
 				console.error('[Analysis] Failed to fetch metrics:', apiErr.message);
 				await interaction.editReply('⚠️ Les résultats Sonar n\'ont pas pu être récupérés');
+				return null;
 			}
 		}
 		catch (apiErr) {

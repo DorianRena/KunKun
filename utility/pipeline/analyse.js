@@ -13,10 +13,12 @@ module.exports = {
 			const message = await interaction.fetchReply();
 			await interaction.editReply({ content: '', embeds: [...message.embeds, embed] });
 			console.log('[Analysis] Pipeline report generated');
+			return scanResult;
 		}
 		catch (pipelineErr) {
 			console.error('[Analysis] Failed to run pipeline analysis:', pipelineErr.message);
 			await interaction.editReply({ content: '⚠️ L\'analyse des logs de pipeline n\'a pas pu s\'exécuter.' });
+			return null;
 		}
 	},
 };
