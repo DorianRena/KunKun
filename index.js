@@ -1,7 +1,7 @@
 // Require the necessary discord.js classes
 const { Client, Collection, Events, GatewayIntentBits, MessageFlags } = require('discord.js');
 const path = require('node:path');
-const fs = require('fs');
+const fs = require('node:fs');
 const config = require('./config');
 const { setup, teardown } = require('./utility/docker/utility');
 const { handleModal } = require('./commands/git/modal');

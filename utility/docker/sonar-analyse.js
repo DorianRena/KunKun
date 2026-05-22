@@ -1,6 +1,7 @@
 const Docker = require('dockerode');
 const { uniqueId } = require('../id-generator');
 const config = require('../../config');
+const { devNull, stderrStream } = require('./utility');
 
 const docker = new Docker();
 
@@ -26,7 +27,7 @@ module.exports = {
 				`-Dsonar.host.url=${sonarHost}`,
 				`-Dsonar.login=${sonarToken}`,
 			],
-			process.stdout,
+			[devNull(), stderrStream()],
 			{
 				HostConfig: {
 					Binds: [`${volumeId}:/repo`],
