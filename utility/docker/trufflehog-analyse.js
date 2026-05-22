@@ -1,5 +1,5 @@
 const Docker = require('dockerode');
-const { PassThrough } = require('stream');
+const { PassThrough, Writable } = require('node:stream');
 
 const docker = new Docker();
 
@@ -18,9 +18,17 @@ module.exports = {
 		];
 
 		const outputStream = new PassThrough();
-		const errStream = new PassThrough();
 		const chunks = [];
 		outputStream.on('data', chunk => chunks.push(chunk));
+
+		const errChunks = [];
+		const errStream = new Writable({
+			write(chunk, enc, cb) {
+				errChunks.push(chunk);
+				cb();
+			},
+		});
+		errStream.dump = () => process.stderr.write(Buffer.concat(errChunks));
 
 		const result = await docker.run(
 			'trufflesecurity/trufflehog:latest',
@@ -52,8 +60,12 @@ module.exports = {
 			.split('\n')
 			.filter(Boolean)
 			.map(line => {
-				try { return JSON.parse(line); }
-				catch { return null; }
+				try {
+					return JSON.parse(line);
+				}
+				catch {
+					return null;
+				}
 			})
 			.filter(Boolean);
 	},

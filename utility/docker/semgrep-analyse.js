@@ -1,5 +1,6 @@
 const Docker = require('dockerode');
 const { PassThrough } = require('node:stream');
+const { stderrStream } = require('./utility');
 
 const docker = new Docker();
 
@@ -24,14 +25,13 @@ module.exports = {
 		];
 
 		const outputStream = new PassThrough();
-		const _ = new PassThrough();
 		const chunks = [];
 		outputStream.on('data', chunk => chunks.push(chunk));
 
 		const result = await docker.run(
 			'semgrep/semgrep',
 			cmd,
-			[outputStream, _],
+			[outputStream, stderrStream()],
 			{
 				Tty: false,
 				HostConfig: {

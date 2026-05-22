@@ -1,10 +1,12 @@
 // Require the necessary discord.js classes
 const { Client, Collection, Events, GatewayIntentBits, MessageFlags } = require('discord.js');
 const path = require('node:path');
-const fs = require('fs');
+const fs = require('node:fs');
 const config = require('./config');
 const { setup, teardown } = require('./utility/docker/utility');
 const { handleModal } = require('./commands/git/modal');
+const sonarApi = require('./utility/sonar/sonar-api');
+const { createIssuesSelectMenu, createIssueDetailEmbed } = require('./utility/sonar/interactive-report');
 
 // Validate required configuration at startup
 try {
@@ -76,6 +78,89 @@ client.on(Events.InteractionCreate, async (interaction) => {
 	}
 	if (interaction.isModalSubmit() && interaction.customId === 'analyse-modal') {
 		await handleModal(interaction);
+	}
+
+	// Sonar button handlers (bugs, vulnerabilities, code smells)
+	if (interaction.isButton() && interaction.customId.startsWith('sonar_')) {
+		const [action, ...rest] = interaction.customId.split(':');
+		const projectKey = rest.join(':');
+		const issueType = action.replace('sonar_', '');
+		const typeMap = {
+			bugs: 'BUG',
+			vulnerabilities: 'VULNERABILITY',
+			code_smells: 'CODE_SMELL',
+		};
+		const sonarType = typeMap[issueType];
+
+		if (!sonarType) return;
+
+		await interaction.deferReply({ ephemeral: true });
+
+		try {
+			if (!projectKey) {
+				await interaction.editReply('❌ Impossible de récupérer la clé du projet');
+				return;
+			}
+
+			// Fetch issues
+			const issues = await sonarApi.fetchIssues(projectKey, sonarType);
+
+			if (issues.length === 0) {
+				await interaction.editReply(`✅ Aucun ${issueType} détecté !`);
+				return;
+			}
+
+			// Create select menu
+			const selectMenu = createIssuesSelectMenu(issues, issueType, projectKey);
+			await interaction.editReply({
+				content: `📋 Sélectionnez une issue parmi les ${issues.length} ${issueType}`,
+				components: [selectMenu],
+			});
+
+			// Store issues in interaction data for later selection
+			interaction.client.sonarIssueCache = interaction.client.sonarIssueCache || {};
+			interaction.client.sonarIssueCache[`${projectKey}_${issueType}`] = issues;
+		}
+		catch (err) {
+			console.error(`[Sonar] Button error for ${issueType}:`, err.message);
+			await interaction.editReply(`❌ Erreur: ${err.message}`);
+		}
+	}
+
+	// Sonar select menu handlers
+	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('sonar_select_')) {
+		const [action, ...rest] = interaction.customId.split(':');
+		const projectKey = rest.join(':');
+		const issueType = action.replace('sonar_select_', '');
+		const selectedValue = interaction.values[0];
+		const issueIndex = parseInt(selectedValue.split('_').pop(), 10);
+
+		await interaction.deferReply({ ephemeral: true });
+
+		try {
+			if (!projectKey) {
+				await interaction.editReply('❌ Impossible de récupérer la clé du projet');
+				return;
+			}
+
+			// Get issues from cache
+			const issues = interaction.client.sonarIssueCache?.[`${projectKey}_${issueType}`];
+
+			if (!issues || !issues[issueIndex]) {
+				await interaction.editReply('❌ Issue non trouvée');
+				return;
+			}
+
+			const issue = issues[issueIndex];
+			const detailEmbed = createIssueDetailEmbed(issue);
+
+			await interaction.editReply({ embeds: [detailEmbed], components: [] });
+		}
+		catch (err) {
+			console.log(err);
+			console.error('[Sonar] Select menu error:', err.message);
+			await interaction.editReply(`❌ Erreur: ${err.message}`);
+		}
 	}
 });
 
