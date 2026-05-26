@@ -233,6 +233,47 @@ const sonarApi = {
 			req.end();
 		});
 	},
+
+	async waitForAnalysisCompletion(projectKey, maxRetries = 20, delayMs = 3000) {
+		for (let i = 0; i < maxRetries; i++) {
+			const result = await new Promise((resolve, reject) => {
+				// même setup http que fetchProjectMetrics...
+				const hostUrl = 'http://localhost:9000';
+				const token = config.sonar.scanner.token;
+				const url = new URL(hostUrl);
+				const protocol = url.protocol === 'https:' ? https : http;
+				const pathname = `/api/ce/component?component=${encodeURIComponent(projectKey)}`;
+
+				const req = protocol.request({
+					hostname: url.hostname,
+					port: url.port || 80,
+					path: pathname,
+					method: 'GET',
+					headers: {
+						Authorization: `Basic ${Buffer.from(`${token}:`).toString('base64')}`,
+						'User-Agent': 'KunKun-Bot',
+					},
+				}, (res) => {
+					let data = '';
+					res.on('data', chunk => data += chunk);
+					res.on('end', () => resolve(JSON.parse(data)));
+				});
+				req.on('error', reject);
+				req.end();
+			});
+
+			const tasks = result.queue || [];
+			const current = result.current;
+
+			// Plus aucune tâche en attente ET la dernière est SUCCESS
+			if (tasks.length === 0 && current?.status === 'SUCCESS') return true;
+			if (current?.status === 'FAILED') throw new Error('SonarQube analysis task failed');
+
+			console.log(`[Sonar][API] Analysis in progress (status: ${current?.status}), waiting...`);
+			await new Promise(r => setTimeout(r, delayMs));
+		}
+		throw new Error('SonarQube analysis timed out');
+	},
 };
 
 module.exports = sonarApi;

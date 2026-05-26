@@ -2,6 +2,7 @@ const Docker = require('dockerode');
 const config = require('../../config');
 const docker = new Docker();
 const { uniqueId } = require('../id-generator');
+const { devNull, stderrStream } = require('./utility');
 
 // Capture stdout+stderr d'un conteneur avec démultiplexage Docker.
 const runAndCapture = async (image, cmd, binds, env = []) => {
@@ -76,7 +77,7 @@ module.exports = {
 		const [cnesExit] = await docker.run(
 			'eclipse-temurin-cnes',
 			cmd,
-			process.stdout,
+			[devNull(), stderrStream()],
 			{
 				HostConfig: {
 					Binds: [
