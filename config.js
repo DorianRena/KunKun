@@ -36,4 +36,7 @@ module.exports = {
 	github: {
 		token: process.env.GITHUB_TOKEN || null,
 	},
+	gitlab: {
+		token: process.env.GITLAB_TOKEN || null,
+	},
 };

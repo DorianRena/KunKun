@@ -1,5 +1,4 @@
 const { SlashCommandBuilder } = require('discord.js');
-const config = require('../../config');
 const { gitClone } = require('../../utility/docker/git-clone');
 const { repoUrlToProjectKey } = require('../../utility/git/repo-utils');
 const { validateRepoUrl, validateBranch } = require('../../utility/git/valid-url');
@@ -50,7 +49,7 @@ module.exports = {
 			await sonar.analyse(interaction, volumeId, projectKey, repoUrl);
 			await semgrep.analyse(interaction, volumeId, repoUrl);
 			await trufflehog.analyse(interaction, volumeId, repoUrl);
-			await pipeline.analyse(interaction, volumeId, repoUrl, config.github.token);
+			await pipeline.analyse(interaction, volumeId, repoUrl);
 
 			// Génération du rapport PDF
 			await interaction.editReply({ content: 'Génération du rapport PDF...', components: [] });
