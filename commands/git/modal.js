@@ -116,7 +116,7 @@ module.exports = {
 
 			const projectKey = repoUrlToProjectKey(repoUrl, branch);
 
-			if (runSonar) await sonar.analyse(interaction, volumeId, projectKey, repoUrl);
+			if (runSonar) await sonar.analyse(interaction, volumeId, projectKey, repoUrl, branch);
 			if (runSemgrep) await semgrep.analyse(interaction, volumeId, repoUrl);
 			if (runTrufflehog) await trufflehog.analyse(interaction, volumeId, repoUrl);
 			if (runPipeline) await pipeline.analyse(interaction, volumeId, repoUrl, config.github.token);

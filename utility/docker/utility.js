@@ -1,5 +1,6 @@
 const Docker = require('dockerode');
 const docker = new Docker();
+const { Writable } = require('node:stream');
 
 const util = {
 	async pullImage(image) {
@@ -267,6 +268,22 @@ const util = {
 		catch (err) {
 			console.error('[Docker] Error during teardown:', err.message);
 		}
+	},
+	devNull() {
+		return new Writable({
+			write(chunk, enc, cb) {
+				cb();
+			},
+		});
+
+	},
+	stderrStream() {
+		return new Writable({
+			write(chunk, enc, cb) {
+				process.stderr.write(chunk);
+				cb();
+			},
+		});
 	},
 };
 

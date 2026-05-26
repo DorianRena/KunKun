@@ -1,10 +1,13 @@
 // Require the necessary discord.js classes
 const { Client, Collection, Events, GatewayIntentBits, MessageFlags } = require('discord.js');
 const path = require('node:path');
-const fs = require('fs');
+const fs = require('node:fs');
 const config = require('./config');
 const { setup, teardown } = require('./utility/docker/utility');
 const { handleModal } = require('./commands/git/modal');
+const sonarApi = require('./utility/sonar/sonar-api');
+const { createIssuesSelectMenu, createIssueDetailEmbed, createRuleEmbed } = require('./utility/sonar/interactive-report');
+const { showRule } = require('./utility/sonar/utility');
 
 // Validate required configuration at startup
 try {
@@ -76,6 +79,106 @@ client.on(Events.InteractionCreate, async (interaction) => {
 	}
 	if (interaction.isModalSubmit() && interaction.customId === 'analyse-modal') {
 		await handleModal(interaction);
+	}
+
+	// Sonar button handlers (bugs, vulnerabilities, code smells)
+	if (interaction.isButton() && interaction.customId.startsWith('sonar:')) {
+		const [, issueType, ...rest] = interaction.customId.split(':');
+		const projectKey = rest.join(':');
+		const typeMap = {
+			bugs: 'BUG',
+			vulnerabilities: 'VULNERABILITY',
+			code_smells: 'CODE_SMELL',
+		};
+		const sonarType = typeMap[issueType];
+
+		if (!sonarType) return;
+
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		try {
+			if (!projectKey) {
+				await interaction.editReply('❌ Impossible de récupérer la clé du projet');
+				return;
+			}
+
+			// Fetch issues
+			const issues = await sonarApi.fetchIssues(projectKey, sonarType);
+
+			if (issues.length === 0) {
+				await interaction.editReply(`✅ Aucun ${issueType} détecté !`);
+				return;
+			}
+
+			// Create select menu
+			const selectMenu = createIssuesSelectMenu(issues, issueType, projectKey);
+			await interaction.editReply({
+				content: `📋 Sélectionnez une issue parmi les ${issues.length} ${issueType}`,
+				components: [selectMenu],
+			});
+
+			// Store issues in interaction data for later selection
+			interaction.client.sonarIssueCache = interaction.client.sonarIssueCache || {};
+			const originalEmbed = interaction.message.embeds[0];
+			const repoUrl = originalEmbed?.url || '';
+
+			interaction.client.sonarIssueCache[`${projectKey}_${issueType}`] = { issues, repoUrl };
+		}
+		catch (err) {
+			console.error(`[Sonar] Button error for ${issueType}:`, err.message);
+			await interaction.editReply(`❌ Erreur: ${err.message}`);
+		}
+	}
+
+	// Sonar select menu handlers
+	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('sonar_select:')) {
+		const [, issueType, ...rest] = interaction.customId.split(':');
+		const projectKey = rest.join(':');
+		const selectedValue = interaction.values[0];
+		const issueIndex = parseInt(selectedValue.split(':').pop(), 10);
+
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		try {
+			if (!projectKey) {
+				await interaction.editReply('❌ Impossible de récupérer la clé du projet');
+				return;
+			}
+
+			// Get issues from cache
+			const cached = interaction.client.sonarIssueCache?.[`${projectKey}_${issueType}`];
+
+			if (!cached?.issues[issueIndex]) {
+				await interaction.editReply('❌ Issue non trouvée');
+				return;
+			}
+			const { issues, repoUrl } = cached;
+
+			const issue = issues[issueIndex];
+			const { embed, row } = createIssueDetailEmbed(issue, repoUrl);
+
+			await interaction.editReply({ embeds: [embed], components: [row] });
+		}
+		catch (err) {
+			console.log(err);
+			console.error('[Sonar] Select menu error:', err.message);
+			await interaction.editReply(`❌ Erreur: ${err.message}`);
+		}
+	}
+
+	if (interaction.isButton() && interaction.customId.startsWith('sonar_rule:')) {
+		const ruleKey = interaction.customId.split('sonar_rule:')[1];
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+		await showRule(ruleKey, interaction);
+	}
+
+	// Tab switcher sur la règle (Pourquoi / Comment corriger)
+	if (interaction.isButton() && interaction.customId.startsWith('sonar_rule_tab:')) {
+		const [, tab, ...rest] = interaction.customId.split(':');
+		const ruleKey = rest.join(':');
+
+		await interaction.deferUpdate();
+		await showRule(ruleKey, interaction, tab);
 	}
 });
 

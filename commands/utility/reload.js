@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const path = require('node:path');
-const fs = require('fs');
+const fs = require('node:fs');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -11,31 +11,43 @@ module.exports = {
 		const commandName = interaction.options.getString('command', true).toLowerCase();
 		const command = interaction.client.commands.get(commandName);
 		if (!command) {
-			return interaction.reply({ content: `There is no command with name \`${commandName}\`!`, flags: MessageFlags.Ephemeral });
+			return interaction.reply({
+				content: `There is no command with name \`${commandName}\`!`,
+				flags: MessageFlags.Ephemeral,
+			});
 		}
 
 		try {
 			// Chercher le fichier de commande dans tous les dossiers
 			const commandFile = findCommandFile(commandName);
 			if (!commandFile) {
-				return interaction.reply({ content: `Impossible de trouver le fichier pour \`${commandName}\`!`, flags: MessageFlags.Ephemeral });
+				return interaction.reply({
+					content: `Impossible de trouver le fichier pour \`${commandName}\`!`,
+					flags: MessageFlags.Ephemeral,
+				});
 			}
 
 			// Supprimer du cache et recharger
 			delete require.cache[require.resolve(commandFile)];
 			const newCommand = require(commandFile);
 			interaction.client.commands.set(newCommand.data.name, newCommand);
-			await interaction.reply({ content: `Command \`${newCommand.data.name}\` was reloaded!`, flags: MessageFlags.Ephemeral });
+			await interaction.reply({
+				content: `Command \`${newCommand.data.name}\` was reloaded!`,
+				flags: MessageFlags.Ephemeral,
+			});
 		}
 		catch (error) {
 			console.error(error);
-			await interaction.reply({ content: `There was an error while reloading a command \`${commandName}\`:\n\`${error.message}\``, flags: MessageFlags.Ephemeral });
+			await interaction.reply({
+				content: `There was an error while reloading a command \`${commandName}\`:\n\`${error.message}\``,
+				flags: MessageFlags.Ephemeral,
+			});
 		}
 	},
 };
 
 function findCommandFile(commandName) {
-	const commandsPath = path.join(__dirname, '..'); // Remonte au dossier 'commands'
+	const commandsPath = path.join(__dirname, '..');
 	const commandFolders = fs.readdirSync(commandsPath);
 
 	for (const folder of commandFolders) {

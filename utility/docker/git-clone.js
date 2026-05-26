@@ -1,5 +1,6 @@
 const { uniqueId } = require('../id-generator');
 const Docker = require('dockerode');
+const { devNull, stderrStream } = require('./utility');
 
 const docker = new Docker();
 
@@ -22,7 +23,7 @@ module.exports = {
 			const result = await docker.run(
 				'alpine/git',
 				cmd,
-				process.stdout,
+				[devNull(), stderrStream()],
 				{
 					HostConfig: {
 						Binds: [`${id}:/repo`],

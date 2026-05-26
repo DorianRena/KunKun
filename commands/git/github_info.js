@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const https = require('https');
+const https = require('node:https');
 
 module.exports = {
 	data: new SlashCommandBuilder()

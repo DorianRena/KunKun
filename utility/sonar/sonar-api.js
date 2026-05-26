@@ -72,7 +72,7 @@ const sonarApi = {
 						}
 					}
 					else if (res.statusCode === 404) {
-					// Project not yet indexed
+						// Project not yet indexed
 						resolve(null);
 					}
 					else {
@@ -121,6 +121,117 @@ const sonarApi = {
 			}
 		}
 		throw lastError || new Error('Failed to fetch metrics after maximum retries');
+	},
+
+	/**
+	 * Fetch issues (bugs, vulnerabilities, code smells) from SonarQube API.
+	 * @param {string} projectKey - SonarQube project key
+	 * @param {string} type - Issue type: 'BUG', 'VULNERABILITY', 'CODE_SMELL'
+	 * @param {number} [pageSize=50] - Maximum results per page
+	 * @returns {Promise<Array>} Array of issues
+	 */
+	async fetchIssues(projectKey, type, pageSize = 50) {
+		const hostUrl = 'http://localhost:9000';
+		const token = config.sonar.scanner.token;
+
+		if (!hostUrl || !token) {
+			throw new Error('SONAR_HOST_URL and SONAR_TOKEN must be configured');
+		}
+
+		const url = new URL(hostUrl);
+		const protocol = url.protocol === 'https:' ? https : http;
+		const hostname = url.hostname;
+		const port = url.port || (url.protocol === 'https:' ? 443 : 80);
+
+		const query = `componentKeys=${encodeURIComponent(projectKey)}&types=${type}&ps=${pageSize}&resolved=false`;
+		const pathname = `/api/issues/search?${query}`;
+
+		return new Promise((resolve, reject) => {
+			const options = {
+				hostname,
+				port,
+				path: pathname,
+				method: 'GET',
+				headers: {
+					Authorization: `Basic ${Buffer.from(`${token}:`).toString('base64')}`,
+					'User-Agent': 'KunKun-Bot',
+				},
+				rejectUnauthorized: false,
+			};
+
+			const req = protocol.request(options, (res) => {
+				let data = '';
+				res.on('data', (chunk) => {
+					data += chunk;
+				});
+				res.on('end', () => {
+					if (res.statusCode === 200) {
+						try {
+							const parsed = JSON.parse(data);
+							resolve(parsed.issues || []);
+						}
+						catch (err) {
+							reject(new Error(`Failed to parse issues response: ${err.message}`));
+						}
+					}
+					else {
+						reject(new Error(`Sonar API returned status ${res.statusCode}`));
+					}
+				});
+			});
+
+			req.on('error', (err) => {
+				reject(new Error(`Failed to query Sonar API: ${err.message}`));
+			});
+
+			req.end();
+		});
+	},
+
+	async fetchRule(ruleKey) {
+		const hostUrl = 'http://localhost:9000';
+		const token = config.sonar.scanner.token;
+		const url = new URL(hostUrl);
+		const protocol = url.protocol === 'https:' ? https : http;
+
+		const pathname = `/api/rules/show?key=${encodeURIComponent(ruleKey)}`;
+
+		return new Promise((resolve, reject) => {
+			const options = {
+				hostname: url.hostname,
+				port: url.port || (url.protocol === 'https:' ? 443 : 80),
+				path: pathname,
+				method: 'GET',
+				headers: {
+					Authorization: `Basic ${Buffer.from(`${token}:`).toString('base64')}`,
+					'User-Agent': 'KunKun-Bot',
+				},
+				rejectUnauthorized: false,
+			};
+
+			const req = protocol.request(options, (res) => {
+				let data = '';
+				res.on('data', (chunk) => {
+					data += chunk;
+				});
+				res.on('end', () => {
+					if (res.statusCode === 200) {
+						try {
+							resolve(JSON.parse(data).rule || null);
+						}
+						catch (err) {
+							reject(new Error(`Failed to parse rule response: ${err.message}`));
+						}
+					}
+					else {
+						reject(new Error(`Sonar API returned status ${res.statusCode}`));
+					}
+				});
+			});
+
+			req.on('error', (err) => reject(new Error(`Failed to query Sonar API: ${err.message}`)));
+			req.end();
+		});
 	},
 };
 
