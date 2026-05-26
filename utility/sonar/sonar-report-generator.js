@@ -1,5 +1,4 @@
 const Docker = require('dockerode');
-const path = require('path');
 const config = require('../../config');
 const docker = new Docker();
 const { uniqueId } = require('../id-generator');
@@ -48,7 +47,6 @@ module.exports = {
 		const sonarHost = 'http://kunkun-sonarqube:9000';
 		const sonarToken = config.sonar.scanner.token;
 		const network = 'kunkun-net';
-		const jarPath = path.resolve('./tools/sonar-cnes-report-5.0.4.jar');
 
 		const tempVolumeName = `report-${uniqueId()}`;
 
@@ -64,21 +62,24 @@ module.exports = {
 
 		// ── Étape 1 : génération CNES ────────────────────────────────────────────
 		console.log(`[Sonar][Report] Generating report for ${projectKey}`);
-		// Remplace l'appel dans generateSonarPdfReport par ceci :
 		const cmd = [
-			'sh', '-c',
-			`java -jar /tools/sonar-cnes-report-5.0.4.jar -s ${sonarHost} -t ${sonarToken} -p ${projectKey} -o /output -l fr_FR -a Kunkun && \
-     soffice --headless --convert-to pdf /output/*.docx --outdir /output`,
+			'java',
+			'-jar', '/src/sonar-cnes-report.jar',
+			'-s', sonarHost,
+			'-t', sonarToken,
+			'-p', projectKey,
+			'-o', '/output',
+			'-l', 'fr_FR',
+			'-a', 'Kunkun',
 		];
 
-		await docker.run(
-			'eclipse-21-libreoffice:latest',
+		const [cnesExit] = await docker.run(
+			'eclipse-temurin-cnes',
 			cmd,
 			process.stdout,
 			{
 				HostConfig: {
 					Binds: [
-						`${jarPath}:/tools/sonar-cnes-report-5.0.4.jar:ro`,
 						`${tempVolumeName}:/output`,
 					],
 					NetworkMode: network,
@@ -92,8 +93,33 @@ module.exports = {
 		}
 		console.log('[Sonar][Report] CNES artifacts generated successfully.');
 
+		// ── Étape 2 : Exécution du script Python ──────────────────────────────────────
+		const today = new Date().toISOString().split('T')[0];
+		const sanitizedProjectKey = projectKey.replace(/:/g, '-');
+		const csvFile = `${today}-${sanitizedProjectKey}-issues-report.csv`;
+		const pdfBasename = `${today}-${sanitizedProjectKey}-report.pdf`;
 
-		// ── Étape 4 : vérification que le PDF est bien là ────────────────────────
+		console.log('[Sonar][Report] Executing Python report generation...');
+		const pythonCmd = [
+			'python3', '/src/generate_sonar_report.py', `/output/${csvFile}`, `/output/${pdfBasename}`,
+		];
+
+		await docker.run(
+			'python-reportlab:latest',
+			pythonCmd,
+			process.stdout,
+			{
+				HostConfig: {
+					Binds: [
+						`${tempVolumeName}:/output`,
+					],
+					NetworkMode: network,
+					AutoRemove: true,
+				},
+			},
+		);
+
+		// ── Étape 3 : vérification que le PDF est bien là ────────────────────────
 		const { statusCode: checkStatus } = await runAndCapture(
 			'alpine:latest',
 			['sh', '-c', 'test -f "/output/$PDF_FILE"'],
@@ -102,7 +128,7 @@ module.exports = {
 		);
 
 		if (checkStatus !== 0) {
-			await abortAndClean(`LibreOffice exited 0 but PDF not found: ${pdfBasename}`);
+			await abortAndClean(`PDF not found: ${pdfBasename}`);
 		}
 
 		console.log(`[Sonar][Report] PDF ready in volume "${tempVolumeName}" as "${pdfBasename}".`);
