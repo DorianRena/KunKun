@@ -7,6 +7,7 @@ module.exports = {
 		await interaction.editReply('Analyse Sonar en cours...');
 		try {
 			await sonarAnalyse(volumeId, { projectKey, projectName: projectKey });
+			await sonarApi.waitForAnalysisCompletion(projectKey);
 		}
 		catch (sonarErr) {
 			console.error('[Analysis] Sonar failed:', sonarErr.message);
@@ -29,7 +30,7 @@ module.exports = {
 				return metrics;
 			}
 			else {
-				console.error('[Analysis] Failed to fetch metrics:', apiErr.message);
+				console.error('[Analysis] Failed to fetch metrics');
 				await interaction.editReply('⚠️ Les résultats Sonar n\'ont pas pu être récupérés');
 				return null;
 			}
