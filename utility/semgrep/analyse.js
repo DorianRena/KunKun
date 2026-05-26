@@ -10,10 +10,12 @@ module.exports = {
 			const message = await interaction.fetchReply();
 			await interaction.editReply({ content: '', embeds: [...message.embeds, embed] });
 			console.log('[Analysis] Semgrep report generated');
+			return semgrepOutput;
 		}
 		catch (semgrepErr) {
 			console.error('[Analysis] Failed to run Semgrep:', semgrepErr.message);
 			await interaction.editReply({ content: '⚠️ Semgrep n\'a pas pu s\'exécuter.' });
+			return null;
 		}
 	},
 };

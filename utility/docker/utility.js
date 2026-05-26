@@ -41,6 +41,46 @@ const util = {
 			}
 		}
 	},
+
+	async ensureBuiltImage(imageName, dockerfileDir) {
+		try {
+			await docker.getImage(imageName).inspect();
+			console.info(`[Docker] Built image ${imageName} already exists`);
+		}
+		catch (err) {
+			if (err.statusCode === 404) {
+				console.info(`[Docker] Building local image ${imageName} from ${dockerfileDir}...`);
+
+				const tar = require('tar-fs');
+				const pack = tar.pack(dockerfileDir);
+
+				await new Promise((resolve, reject) => {
+					docker.buildImage(pack, { t: imageName }, (err, stream) => {
+						if (err) return reject(err);
+						docker.modem.followProgress(
+							stream,
+							(err, res) => {
+								if (err) { reject(err); }
+								else {
+									console.info(`[Docker] Image ${imageName} built successfully`);
+									resolve(res);
+								}
+							},
+							(event) => {
+								if (event.stream) {
+									process.stdout.write(`[Docker Build] ${event.stream}`);
+								}
+							},
+						);
+					});
+				});
+			}
+			else {
+				throw err;
+			}
+		}
+	},
+
 	async getOrCreateContainer(config) {
 		try {
 			const container = docker.getContainer(config.name);
@@ -185,6 +225,9 @@ const util = {
 		await util.ensureImage('semgrep/semgrep');
 		await util.ensureImage('sonarsource/sonar-scanner-cli');
 		await util.ensureImage('trufflesecurity/trufflehog');
+		await util.ensureImage('alpine:latest');
+		await util.ensureBuiltImage('eclipse-temurin-cnes:latest', './tools/eclipse-temurin-cnes');
+		await util.ensureBuiltImage('python-reportlab:latest', './tools/python-reportlab');
 
 		await util.waitForHealthy(containerSonar, { timeout: 120_000, interval: 10000 });
 
@@ -220,7 +263,7 @@ const util = {
 				}
 			}
 
-			console('[Docker] Infrastructure cleaned up');
+			console.info('[Docker] Infrastructure cleaned up');
 		}
 		catch (err) {
 			console.error('[Docker] Error during teardown:', err.message);

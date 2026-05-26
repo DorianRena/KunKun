@@ -9,7 +9,7 @@ const sonarApi = {
 	 * @returns {Promise<object>} Metrics object or null if not ready
 	 */
 	async fetchProjectMetrics(projectKey) {
-		const hostUrl = 'http://localhost:9000'/* config.sonar.scanner.hostUrl*/;
+		const hostUrl = 'http://localhost:9000';
 		const token = config.sonar.scanner.token;
 
 		if (!hostUrl || !token) {
@@ -48,7 +48,7 @@ const sonarApi = {
 					Authorization: `Basic ${Buffer.from(`${token}:`).toString('base64')}`,
 					'User-Agent': 'KunKun-Bot',
 				},
-				rejectUnauthorized: false, // Allow self-signed certs
+				rejectUnauthorized: false,
 			};
 
 			const req = protocol.request(options, (res) => {
@@ -108,7 +108,7 @@ const sonarApi = {
 				if (attempt < maxRetries) {
 					console.log(`[Sonar][API] Project ${projectKey} not yet indexed, retrying in ${delayMs}ms...`);
 					await new Promise((resolve) => setTimeout(resolve, delayMs));
-					delayMs *= 1.5; // Exponential backoff
+					delayMs *= 1.5;
 				}
 			}
 			catch (err) {

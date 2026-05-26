@@ -7,6 +7,8 @@ const sonar = require('../../utility/sonar/analyse');
 const semgrep = require('../../utility/semgrep/analyse');
 const trufflehog = require('../../utility/trufflehog/analyse');
 const pipeline = require('../../utility/pipeline/analyse');
+const { generateSonarPdfReport } = require('../../utility/sonar/sonar-report-generator');
+const { sendWithPdfButton } = require('../../utility/pdf/pdf-button');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -44,10 +46,18 @@ module.exports = {
 			// Génération d'une projectKey à partir de l'URL du repo pour conserver l'historique Sonar
 			const projectKey = repoUrlToProjectKey(repoUrl, branch);
 
+			// Lancement des analyses
 			await sonar.analyse(interaction, volumeId, projectKey, repoUrl);
 			await semgrep.analyse(interaction, volumeId, repoUrl);
 			await trufflehog.analyse(interaction, volumeId, repoUrl);
 			await pipeline.analyse(interaction, volumeId, repoUrl, config.github.token);
+
+			// Génération du rapport PDF
+			await interaction.editReply({ content: 'Génération du rapport PDF...', components: [] });
+			const report = await generateSonarPdfReport(projectKey);
+			const message = await interaction.fetchReply();
+			const existingEmbeds = message.embeds;
+			await sendWithPdfButton(interaction, report, existingEmbeds);
 
 		}
 		catch (err) {
