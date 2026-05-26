@@ -7,14 +7,7 @@ const {
 	StringSelectMenuOptionBuilder,
 	LabelBuilder,
 } = require('discord.js');
-const { validateRepoUrl, validateBranch } = require('../../utility/git/valid-url');
-const { gitClone } = require('../../utility/docker/git-clone');
-const { repoUrlToProjectKey } = require('../../utility/git/repo-utils');
-const sonar = require('../../utility/sonar/analyse');
-const semgrep = require('../../utility/semgrep/analyse');
-const trufflehog = require('../../utility/trufflehog/analyse');
-const pipeline = require('../../utility/pipeline/analyse');
-const config = require('../../config');
+const { analyse } = require('../../utility/analyse');
 
 module.exports = {
 	data: new SlashCommandBuilder()
@@ -93,37 +86,11 @@ module.exports = {
 		const branch = interaction.fields.getTextInputValue('branch').trim() || null;
 		const analyses = interaction.fields.getField('analyses').values;
 
-		const runSonar = analyses.includes('sonar');
-		const runSemgrep = analyses.includes('semgrep');
-		const runTrufflehog = analyses.includes('trufflehog');
-		const runPipeline = analyses.includes('pipeline');
+		const sonar = analyses.includes('sonar');
+		const semgrep = analyses.includes('semgrep');
+		const trufflehog = analyses.includes('trufflehog');
+		const pipeline = analyses.includes('pipeline');
 		// Validations
-		const urlValidation = validateRepoUrl(repoUrl);
-		if (!urlValidation.isValid) {
-			return await interaction.reply({ content: `Erreur : ${urlValidation.error}`, ephemeral: true });
-		}
-		const branchValidation = validateBranch(branch);
-		if (!branchValidation.isValid) {
-			return await interaction.reply({ content: `Erreur : ${branchValidation.error}`, ephemeral: true });
-		}
-
-		await interaction.deferReply();
-
-		try {
-			await interaction.editReply('Clonage du repo en cours...');
-			const volumeId = await gitClone(repoUrl, branch);
-			await interaction.editReply('Repo cloné avec succès !');
-
-			const projectKey = repoUrlToProjectKey(repoUrl, branch);
-
-			if (runSonar) await sonar.analyse(interaction, volumeId, projectKey, repoUrl, branch);
-			if (runSemgrep) await semgrep.analyse(interaction, volumeId, repoUrl);
-			if (runTrufflehog) await trufflehog.analyse(interaction, volumeId, repoUrl);
-			if (runPipeline) await pipeline.analyse(interaction, volumeId, repoUrl, config.github.token);
-		}
-		catch (err) {
-			console.error(err);
-			await interaction.editReply(`Erreur lors de l'analyse : \`${err.message}\``);
-		}
+		await analyse(interaction, repoUrl, branch, { sonar, semgrep, trufflehog, pipeline });
 	},
 };
