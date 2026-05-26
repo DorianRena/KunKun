@@ -1,12 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 
 module.exports = {
-	/**
-	 * Formate la sortie JSON de Semgrep en Discord Embed
-	 * @param {string} jsonOutput Sortie JSON de Semgrep
-	 * @param {string} repoUrl URL du repository
-	 * @returns {EmbedBuilder} Embed formaté
-	 */
 	formatSemgrepReport(jsonOutput, repoUrl) {
 		let report;
 		try {
@@ -16,101 +10,52 @@ module.exports = {
 			console.error('[Semgrep][Formatter] Failed to parse Semgrep JSON:', err.message);
 			return new EmbedBuilder()
 				.setColor(0xFF0000)
-				.setTitle('❌ Rapport Semgrep')
-				.setDescription('Erreur lors du parsing du rapport Semgrep');
+				.setTitle('❌ Erreur d\'analyse')
+				.setDescription('Le rapport généré n\'est pas un JSON valide.');
 		}
 
 		const results = report.results || [];
-		const errors = report.errors || [];
-		const paths = report.paths || {};
-		const scannedFiles = (paths.scanned || []).length;
-		const totalTime = (report.time?.total_time || 0).toFixed(2);
+		const severities = { ERROR: 0, WARNING: 0, INFO: 0 };
 
-		// Catégoriser par severité
-		const severities = {
-			CRITICAL: 0,
-			HIGH: 0,
-			MEDIUM: 0,
-			LOW: 0,
-		};
-
-		results.forEach(result => {
-			const severity = (result.extra?.severity || 'MEDIUM').toUpperCase();
-			if (severity in severities) {
-				severities[severity]++;
-			}
+		// Comptage intelligent des sévérités
+		results.forEach(r => {
+			const sev = (r.extra?.severity || 'WARNING').toUpperCase();
+			if (sev in severities) severities[sev]++;
+			else severities.WARNING++;
 		});
 
-		const totalFindings = results.length;
-		const hasCritical = severities.CRITICAL > 0;
-		const hasHigh = severities.HIGH > 0;
-
-		// Détermine la couleur selon severité
-		let embedColor = 0x00FF00; // GREEN (aucun problème)
-		if (hasCritical) {
-			embedColor = 0xFF0000; // RED
-		}
-		else if (hasHigh) {
-			embedColor = 0xFF6600; // ORANGE
-		}
-		else if (severities.MEDIUM > 0) {
-			embedColor = 0xFFFF00; // YELLOW
-		}
+		// Calcul couleur
+		const color = severities.ERROR > 0 ? 0xFF0000 : (severities.WARNING > 0 ? 0xFFA500 : 0x00FF00);
 
 		const embed = new EmbedBuilder()
-			.setColor(embedColor)
-			.setTitle(`🔍 Rapport Semgrep — ${repoUrl.split('/').slice(-2).join('/')}`)
-			.setDescription(`**Findings totaux : ${totalFindings}**`)
+			.setColor(color)
+			.setTitle(`🔍 Rapport de sécurité : ${repoUrl.split('/').slice(-2).join('/')}`)
+			.setDescription(`Analyse terminée sur **${report.paths?.scanned?.length || 0}** fichiers.`)
 			.addFields(
-				{
-					name: '🔴 CRITICAL',
-					value: `${severities.CRITICAL}`,
-					inline: true,
-				},
-				{
-					name: '🟠 HIGH',
-					value: `${severities.HIGH}`,
-					inline: true,
-				},
-				{
-					name: '🟡 MEDIUM',
-					value: `${severities.MEDIUM}`,
-					inline: true,
-				},
-				{
-					name: '🔵 LOW',
-					value: `${severities.LOW}`,
-					inline: true,
-				},
-				{
-					name: '📁 Fichiers scannés',
-					value: `${scannedFiles}`,
-					inline: true,
-				},
-				{
-					name: '⏱️ Durée',
-					value: `${totalTime}s`,
-					inline: true,
-				},
+				{ name: '🔴 Erreurs', value: `${severities.ERROR}`, inline: true },
+				{ name: '🟠 Warnings', value: `${severities.WARNING}`, inline: true },
+				{ name: '🔵 Infos', value: `${severities.INFO}`, inline: true },
 			);
 
-		if (errors.length > 0) {
-			embed.addFields({
-				name: '⚠️ Erreurs',
-				value: errors.slice(0, 5).map(e => `• ${e.message || e}`).join('\n') || 'Erreurs non spécifiées',
-			});
+		// Ajout des 5 premières failles trouvées (si elles existent)
+		if (results.length > 0) {
+			const topFindings = results.slice(0, 5).map(r => {
+				const fileName = r.path.split('/').pop();
+				return `**[${r.extra.severity}]** ${r.check_id.split('.').pop()} \n└─ \`${fileName}:${r.start.line}\``;
+			}).join('\n');
+
+			embed.addFields({ name: '🔍 Top failles trouvées', value: topFindings });
+
+			if (results.length > 5) {
+				embed.addFields({ name: '...', value: `*...et ${results.length - 5} autres problèmes.*` });
+			}
 		}
 		else {
-			embed.addFields({
-				name: '✅ Statut',
-				value: 'Pas d\'erreurs lors de l\'analyse',
-			});
+			embed.addFields({ name: '✅ Statut', value: 'Aucune vulnérabilité critique détectée.' });
 		}
 
-		embed.setFooter({ text: 'Powered by Semgrep' });
-		embed.setTimestamp();
-
-		return embed;
+		return embed
+			.setFooter({ text: `Analyse effectuée en ${(report.time?.total_time || 0).toFixed(2)}s` })
+			.setTimestamp();
 	},
 };
-

@@ -42,7 +42,7 @@ module.exports = {
 			isValid: false,
 			normalized: null,
 			platform: null,
-			error: 'URL invalide. Formats acceptés :\n• GitHub - `https://github.com/owner/repo`\n• GitLab - `https://gitlab.com/owner/repo`',
+			error: 'URL invalide. Formats acceptés :\n• GitHub - `https://github.com/owner/repo.git`\n• GitLab - `https://gitlab.com/owner/repo.git`',
 		};
 	},
 	validateBranch(branch) {
