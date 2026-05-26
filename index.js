@@ -6,7 +6,7 @@ const config = require('./config');
 const { setup, teardown } = require('./utility/docker/utility');
 const { handleModal } = require('./commands/git/modal');
 const sonarApi = require('./utility/sonar/sonar-api');
-const { createIssuesSelectMenu, createIssueDetailEmbed } = require('./utility/sonar/interactive-report');
+const { createIssuesSelectMenu, createIssueDetailEmbed, createRuleEmbed } = require('./utility/sonar/interactive-report');
 
 // Validate required configuration at startup
 try {
@@ -81,10 +81,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
 	}
 
 	// Sonar button handlers (bugs, vulnerabilities, code smells)
-	if (interaction.isButton() && interaction.customId.startsWith('sonar_')) {
-		const [action, ...rest] = interaction.customId.split(':');
+	if (interaction.isButton() && interaction.customId.startsWith('sonar:')) {
+		const [, issueType, ...rest] = interaction.customId.split(':');
 		const projectKey = rest.join(':');
-		const issueType = action.replace('sonar_', '');
 		const typeMap = {
 			bugs: 'BUG',
 			vulnerabilities: 'VULNERABILITY',
@@ -94,7 +93,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 		if (!sonarType) return;
 
-		await interaction.deferReply({ ephemeral: true });
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		try {
 			if (!projectKey) {
@@ -119,7 +118,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 			// Store issues in interaction data for later selection
 			interaction.client.sonarIssueCache = interaction.client.sonarIssueCache || {};
-			interaction.client.sonarIssueCache[`${projectKey}_${issueType}`] = issues;
+			const originalEmbed = interaction.message.embeds[0];
+			const repoUrl = originalEmbed?.url || '';
+
+			interaction.client.sonarIssueCache[`${projectKey}_${issueType}`] = { issues, repoUrl };
 		}
 		catch (err) {
 			console.error(`[Sonar] Button error for ${issueType}:`, err.message);
@@ -128,14 +130,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
 	}
 
 	// Sonar select menu handlers
-	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('sonar_select_')) {
-		const [action, ...rest] = interaction.customId.split(':');
+	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('sonar_select:')) {
+		const [, issueType, ...rest] = interaction.customId.split(':');
 		const projectKey = rest.join(':');
-		const issueType = action.replace('sonar_select_', '');
 		const selectedValue = interaction.values[0];
-		const issueIndex = parseInt(selectedValue.split('_').pop(), 10);
+		const issueIndex = parseInt(selectedValue.split(':').pop(), 10);
 
-		await interaction.deferReply({ ephemeral: true });
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		try {
 			if (!projectKey) {
@@ -144,21 +145,41 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			}
 
 			// Get issues from cache
-			const issues = interaction.client.sonarIssueCache?.[`${projectKey}_${issueType}`];
+			const cached = interaction.client.sonarIssueCache?.[`${projectKey}_${issueType}`];
 
-			if (!issues || !issues[issueIndex]) {
+			if (!cached?.issues[issueIndex]) {
 				await interaction.editReply('❌ Issue non trouvée');
 				return;
 			}
+			const { issues, repoUrl } = cached;
 
 			const issue = issues[issueIndex];
-			const detailEmbed = createIssueDetailEmbed(issue);
+			const { embed, row } = createIssueDetailEmbed(issue, repoUrl);
 
-			await interaction.editReply({ embeds: [detailEmbed], components: [] });
+			await interaction.editReply({ embeds: [embed], components: [row] });
 		}
 		catch (err) {
 			console.log(err);
 			console.error('[Sonar] Select menu error:', err.message);
+			await interaction.editReply(`❌ Erreur: ${err.message}`);
+		}
+	}
+
+	if (interaction.isButton() && interaction.customId.startsWith('sonar_rule:')) {
+		const ruleKey = interaction.customId.split('sonar_rule:')[1];
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		try {
+			const rule = await sonarApi.fetchRule(ruleKey);
+			if (!rule) {
+				await interaction.editReply('❌ Règle introuvable');
+				return;
+			}
+			const ruleEmbed = createRuleEmbed(rule);
+			await interaction.editReply({ embeds: [ruleEmbed] });
+		}
+		catch (err) {
+			console.error('[Sonar] Rule fetch error:', err.message);
 			await interaction.editReply(`❌ Erreur: ${err.message}`);
 		}
 	}

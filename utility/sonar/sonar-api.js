@@ -72,7 +72,7 @@ const sonarApi = {
 						}
 					}
 					else if (res.statusCode === 404) {
-					// Project not yet indexed
+						// Project not yet indexed
 						resolve(null);
 					}
 					else {
@@ -184,6 +184,52 @@ const sonarApi = {
 				reject(new Error(`Failed to query Sonar API: ${err.message}`));
 			});
 
+			req.end();
+		});
+	},
+
+	async fetchRule(ruleKey) {
+		const hostUrl = 'http://localhost:9000';
+		const token = config.sonar.scanner.token;
+		const url = new URL(hostUrl);
+		const protocol = url.protocol === 'https:' ? https : http;
+
+		const pathname = `/api/rules/show?key=${encodeURIComponent(ruleKey)}`;
+
+		return new Promise((resolve, reject) => {
+			const options = {
+				hostname: url.hostname,
+				port: url.port || (url.protocol === 'https:' ? 443 : 80),
+				path: pathname,
+				method: 'GET',
+				headers: {
+					Authorization: `Basic ${Buffer.from(`${token}:`).toString('base64')}`,
+					'User-Agent': 'KunKun-Bot',
+				},
+				rejectUnauthorized: false,
+			};
+
+			const req = protocol.request(options, (res) => {
+				let data = '';
+				res.on('data', (chunk) => {
+					data += chunk;
+				});
+				res.on('end', () => {
+					if (res.statusCode === 200) {
+						try {
+							resolve(JSON.parse(data).rule || null);
+						}
+						catch (err) {
+							reject(new Error(`Failed to parse rule response: ${err.message}`));
+						}
+					}
+					else {
+						reject(new Error(`Sonar API returned status ${res.statusCode}`));
+					}
+				});
+			});
+
+			req.on('error', (err) => reject(new Error(`Failed to query Sonar API: ${err.message}`)));
 			req.end();
 		});
 	},

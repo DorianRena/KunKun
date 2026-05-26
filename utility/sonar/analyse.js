@@ -3,7 +3,7 @@ const sonarApi = require('./sonar-api');
 const { createInteractiveReport } = require('./interactive-report');
 
 module.exports = {
-	async analyse(interaction, volumeId, projectKey, repoUrl) {
+	async analyse(interaction, volumeId, projectKey, repoUrl, branch = null) {
 		await interaction.editReply('Analyse Sonar en cours...');
 		try {
 			await sonarAnalyse(volumeId, { projectKey, projectName: projectKey });
@@ -17,7 +17,7 @@ module.exports = {
 		try {
 			const metrics = await sonarApi.fetchProjectMetricsWithRetry(projectKey, 5, 2000);
 			if (metrics) {
-				const { embed, actionRow } = createInteractiveReport(metrics, projectKey, repoUrl);
+				const { embed, actionRow } = createInteractiveReport(metrics, projectKey, repoUrl, branch);
 				const message = await interaction.fetchReply();
 				await interaction.editReply({
 					content: '',
