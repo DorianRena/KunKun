@@ -14,6 +14,11 @@ turndownService.addRule('code', {
 	replacement: (content, node) => `\`\`\`\n${node.textContent}\n\`\`\``,
 });
 
+const tabColors = {
+	root_cause: 0x4A90D9,
+	how_to_fix: 0x2ECC71,
+};
+
 function buildFileUrl(repoUrl, component, line) {
 	const filePath = component.split(':').at(-1);
 	const base = repoUrl.replace(/\/tree\//, '/blob/');
@@ -165,13 +170,46 @@ module.exports = {
 		return { embed, row };
 	},
 
-	createRuleEmbed(rule) {
-		// Nettoyer le HTML basique de la description
-		const descriptionHTML = rule.descriptionSections.find(s => s.key === 'root_cause').content;
-		const description = turndownService.turndown(descriptionHTML).slice(0, 4096) || 'Pas de description disponible';
-		return new EmbedBuilder()
-			.setColor(0x4A90D9)
-			.setTitle(`📖 ${rule.key}`)
+	createRuleEmbed(rule, tab = 'root_cause') {
+		const sectionKeyMap = {
+			root_cause: 'root_cause',
+			how_to_fix: 'how_to_fix',
+		};
+
+		const sectionKey = sectionKeyMap[tab] || 'root_cause';
+
+		const rawContent = rule.descriptionSections.find(s => s.key === sectionKey)?.content
+			?? rule.descriptionSections[0]?.content
+			?? '';
+
+		const description = rawContent
+			.replace(/<[^>]+>/g, ' ')
+			.replace(/\s+/g, ' ')
+			.trim()
+			.slice(0, 4096) || 'Pas de description disponible';
+
+		const tabLabels = {
+			root_cause: '❓ Pourquoi c\'est un problème',
+			how_to_fix: '🔧 Comment le corriger',
+		};
+
+		const row = new ActionRowBuilder().addComponents(
+			new ButtonBuilder()
+				.setCustomId(`sonar_rule_tab:root_cause:${rule.key}`)
+				.setLabel('❓ Pourquoi')
+				.setStyle(tab === 'root_cause' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+				.setDisabled(tab === 'root_cause'),
+			new ButtonBuilder()
+				.setCustomId(`sonar_rule_tab:how_to_fix:${rule.key}`)
+				.setLabel('🔧 Comment corriger')
+				.setStyle(tab === 'how_to_fix' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+				.setDisabled(tab === 'how_to_fix'),
+		);
+
+		const title = `📖 ${rule.name} (${rule.key})\n\n${tabLabels[tab]}`;
+		const embed = new EmbedBuilder()
+			.setColor(tabColors[tab] ?? 0x4A90D9)
+			.setTitle(title.slice(0, 256))
 			.setDescription(description)
 			.addFields(
 				{ name: '🏷️ Nom', value: rule.name || 'N/A', inline: false },
@@ -180,5 +218,7 @@ module.exports = {
 			)
 			.setFooter({ text: 'SonarQube Rule' })
 			.setTimestamp();
+
+		return { embed, row };
 	},
 };

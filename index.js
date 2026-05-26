@@ -7,6 +7,7 @@ const { setup, teardown } = require('./utility/docker/utility');
 const { handleModal } = require('./commands/git/modal');
 const sonarApi = require('./utility/sonar/sonar-api');
 const { createIssuesSelectMenu, createIssueDetailEmbed, createRuleEmbed } = require('./utility/sonar/interactive-report');
+const { showRule } = require('./utility/sonar/utility');
 
 // Validate required configuration at startup
 try {
@@ -168,20 +169,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
 	if (interaction.isButton() && interaction.customId.startsWith('sonar_rule:')) {
 		const ruleKey = interaction.customId.split('sonar_rule:')[1];
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+		await showRule(ruleKey, interaction);
+	}
 
-		try {
-			const rule = await sonarApi.fetchRule(ruleKey);
-			if (!rule) {
-				await interaction.editReply('❌ Règle introuvable');
-				return;
-			}
-			const ruleEmbed = createRuleEmbed(rule);
-			await interaction.editReply({ embeds: [ruleEmbed] });
-		}
-		catch (err) {
-			console.error('[Sonar] Rule fetch error:', err.message);
-			await interaction.editReply(`❌ Erreur: ${err.message}`);
-		}
+	// Tab switcher sur la règle (Pourquoi / Comment corriger)
+	if (interaction.isButton() && interaction.customId.startsWith('sonar_rule_tab:')) {
+		const [, tab, ...rest] = interaction.customId.split(':');
+		const ruleKey = rest.join(':');
+
+		await interaction.deferUpdate();
+		await showRule(ruleKey, interaction, tab);
 	}
 });
 
