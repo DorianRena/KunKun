@@ -178,15 +178,8 @@ module.exports = {
 
 		const sectionKey = sectionKeyMap[tab] || 'root_cause';
 
-		const rawContent = rule.descriptionSections.find(s => s.key === sectionKey)?.content
-			?? rule.descriptionSections[0]?.content
-			?? '';
-
-		const description = rawContent
-			.replace(/<[^>]+>/g, ' ')
-			.replace(/\s+/g, ' ')
-			.trim()
-			.slice(0, 4096) || 'Pas de description disponible';
+		const descriptionHTML = rule.descriptionSections.find(s => s.key === sectionKey).content;
+		const description = turndownService.turndown(descriptionHTML).slice(0, 4096) || 'Pas de description disponible';
 
 		const tabLabels = {
 			root_cause: '❓ Pourquoi c\'est un problème',

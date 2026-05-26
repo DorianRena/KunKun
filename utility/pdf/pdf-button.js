@@ -28,7 +28,7 @@ const readPdfFromVolume = async (volumeName, filename) => {
 	await lsContainer.start();
 	await lsContainer.wait();
 	await lsContainer.remove();
-	console.log(`[Sonar][Report] Volume contents:\n${Buffer.concat(lsChunks).toString()}`);
+	// console.log(`[Sonar][Report] Volume contents:\n${Buffer.concat(lsChunks).toString()}`);
 
 	// Étape 2 : lecture du PDF — on passe le filename via variable d'env
 	// pour éviter tout problème de quoting sur les noms avec espaces/tirets/points
