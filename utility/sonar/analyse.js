@@ -1,6 +1,7 @@
 const { sonarAnalyse } = require('../docker/sonar-analyse');
 const sonarApi = require('./sonar-api');
 const { createInteractiveReport } = require('./interactive-report');
+const { generateSonarReport } = require('./sonar-report-generator');
 
 module.exports = {
 	async analyse(interaction, volumeId, projectKey, repoUrl, branch = null) {
@@ -27,6 +28,7 @@ module.exports = {
 					components: [actionRow],
 				});
 				console.log(`[Analysis] Sonar interactive report generated for project ${projectKey}`);
+				await generateSonarReport(projectKey, volumeId);
 				return metrics;
 			}
 			else {

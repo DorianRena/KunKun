@@ -56,17 +56,28 @@ module.exports = {
 		console.log(`[TruffleHog][Analyze] Analysis finished for volume ${volumeId}`);
 
 		// Chaque ligne est un objet JSON indépendant
-		return raw
+		// Remplacez votre map/filter final par ceci :
+		const results = raw
 			.split('\n')
 			.filter(Boolean)
 			.map(line => {
-				try {
-					return JSON.parse(line);
-				}
-				catch {
-					return null;
-				}
+				try { return JSON.parse(line); }
+				catch { return null; }
 			})
 			.filter(Boolean);
+
+		// Dédoublonnage basé sur une clé unique (Fichier + Ligne + Secret)
+		const uniqueResults = [];
+		const seen = new Set();
+
+		for (const item of results) {
+			const key = `${item.SourceMetadata.Data.Filesystem.file}:${item.SourceMetadata.Data.Filesystem.line}:${item.Raw}`;
+			if (!seen.has(key)) {
+				uniqueResults.push(item);
+				seen.add(key);
+			}
+		}
+
+		return uniqueResults;
 	},
 };

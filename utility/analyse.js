@@ -5,7 +5,7 @@ const sonar = require('./sonar/analyse');
 const semgrep = require('./semgrep/analyse');
 const trufflehog = require('./trufflehog/analyse');
 const pipeline = require('./pipeline/analyse');
-const { generateSonarPdfReport } = require('./sonar/sonar-report-generator');
+const { generateReport } = require('./pdf/report-generator');
 const { sendWithPdfButton } = require('./pdf/pdf-button');
 
 module.exports = {
@@ -43,14 +43,23 @@ module.exports = {
 			const projectKey = repoUrlToProjectKey(repoUrl, branch);
 
 			// Lancement des analyses
-			if (analyses.sonar) await sonar.analyse(interaction, volumeId, projectKey, repoUrl, branch);
-			if (analyses.semgrep) await semgrep.analyse(interaction, volumeId, repoUrl);
-			if (analyses.trufflehog) await trufflehog.analyse(interaction, volumeId, repoUrl);
-			if (analyses.pipeline) await pipeline.analyse(interaction, volumeId, repoUrl);
+			const metrics = {};
+			if (analyses.sonar) {
+				metrics.sonar = await sonar.analyse(interaction, volumeId, projectKey, repoUrl, branch);
+			}
+			if (analyses.semgrep) {
+				metrics.semgrep = await semgrep.analyse(interaction, volumeId, repoUrl);
+			}
+			if (analyses.trufflehog) {
+				metrics.trufflehog = await trufflehog.analyse(interaction, volumeId, repoUrl);
+			}
+			if (analyses.pipeline) {
+				metrics.pipeline = await pipeline.analyse(interaction, volumeId, repoUrl);
+			}
 
 			// Génération du rapport PDF
 			await interaction.editReply({ content: 'Génération du rapport PDF...', components: [] });
-			const report = await generateSonarPdfReport(projectKey);
+			const report = await generateReport(projectKey, volumeId, metrics, branch);
 			const message = await interaction.fetchReply();
 			const existingEmbeds = message.embeds;
 			await sendWithPdfButton(interaction, report, existingEmbeds);
