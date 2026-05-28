@@ -11,15 +11,13 @@ module.exports = {
 		if (metrics.sonar) {
 			const status = metrics.sonar.measures?.find((m) => m.metric === 'alert_status')?.value || 'NONE';
 			metrics.sonar.status = status;
-			const csvFile = `${today}-${sanitizedProjectKey}-report.csv`;
+			const csvFile = `/output/${today}-${sanitizedProjectKey}-issues-report.csv`;
 			metrics.sonar.csvFile = csvFile;
 		}
 
 		metrics.info = {};
 		metrics.info.branch = branch || 'HEAD';
 		metrics.info.name = sanitizedProjectKey;
-
-		console.log(JSON.stringify(metrics));
 
 		const pythonCmd = [
 			'python3', '/src/generate_report.py', JSON.stringify(metrics), `/output/${pdfBasename}`,

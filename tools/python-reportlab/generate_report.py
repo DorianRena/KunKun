@@ -6,7 +6,8 @@ import json
 import argparse
 from collections import defaultdict
 from datetime import datetime
-
+from zoneinfo import ZoneInfo
+from xml.sax.saxutils import escape as xml_escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -23,6 +24,7 @@ try:
     locale.setlocale(locale.LC_TIME, 'fr_FR.UTF-8')
 except locale.Error:
     locale.setlocale(locale.LC_TIME, '')
+now = datetime.now(ZoneInfo("Europe/Paris"))
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 BLUE        = colors.HexColor("#005191")
@@ -205,7 +207,7 @@ def _draw_footer(canvas, doc):
     canvas.setFont("Helvetica", 7)
     canvas.setFillColor(GRAY_DARK)
     canvas.drawString(margin, 3.5 * mm,
-        f"KunKun  —  Généré le {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+        f"KunKun  —  Généré le {now.strftime('%d/%m/%Y %H:%M')}")
 
 # ── Table base style factory ──────────────────────────────────────────────────
 def table_base(header_color=BLUE):
@@ -447,8 +449,8 @@ def _build_sonar_issues(story, issues, s, usable):
     rule_summary = {}
     for iss in issues:
         key = (
-            iss.get("rule", "").replace(":","<br/>:"),
-            iss.get("message", "").strip('"')[:1000],
+            xml_escape(iss.get("rule", "")).replace(":","<br/>:"),
+            xml_escape(iss.get("message", "").strip('"'))[:1000],
             iss.get("type", "").replace("VULNERABILITY", "VULN"),
             iss.get("severity", ""),
         )
@@ -511,13 +513,13 @@ def _build_sonar_issues(story, issues, s, usable):
     for i, iss in enumerate(sorted_issues, start=1):
         sev  = iss.get("severity", "")
         tp   = iss.get("type", "").replace("VULNERABILITY", "VULN")
-        rule = iss.get("rule", "").replace(":","<br/>:")
+        rule    = xml_escape(iss.get("rule", "")).replace(":","<br/>:")
         try:
             line = int(float(iss.get("line", 0)))
         except Exception:
             line = 0
-        loc     = f"{iss['_file']} <b>L.{line}</b>"
-        raw_msg = iss.get("message", "").strip('"').replace('""', '"')
+        loc     = f"{xml_escape(iss['_file'])} <b>L.{line}</b>"
+        raw_msg = xml_escape(iss.get("message", "").strip('"').replace('""', '"'))
         msg     = (raw_msg[:22] + "…") if len(raw_msg) > 22 else raw_msg
         eff     = iss.get("effort", "—")
         sev_c   = SEV_COLORS.get(sev, GRAY_MID)
@@ -596,7 +598,7 @@ def build_semgrep_section(story, metrics, s, usable):
         Paragraph("Règle", s["th_left"]),
         Paragraph("OWASP", s["th"]),
         Paragraph("CWE", s["th"]),
-        Paragraph("Message", s["th_left"]),
+        Paragraph("Description", s["th_left"]),
         Paragraph("Fichier / Ligne", s["th_left"]),
     ]]
     
@@ -717,6 +719,22 @@ def build_trufflehog_section(story, metrics, s, usable):
 
 
 # ── PIPELINE section ──────────────────────────────────────────────────────────
+def _fmt_dt(iso_str):
+    """Formate une date ISO 8601 en 'DD/MM/YYYY HH:MM'. Retourne '—' si invalide."""
+    if not iso_str:
+        return "—"
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        return dt.strftime("%d/%m/%Y %H:%M")
+    except (ValueError, AttributeError):
+        return iso_str[:16].replace("T", " ")
+
+def _short_sha(sha):
+    """Retourne les 7 premiers caractères d'un SHA de commit."""
+    if not sha:
+        return "—"
+    return sha[:7]
+
 def build_pipeline_section(story, metrics, s, usable):
     PL_COLOR = SECTION_COLORS["pipeline"]
     pipeline = metrics["pipeline"]
@@ -737,19 +755,73 @@ def build_pipeline_section(story, metrics, s, usable):
             seen.add(key)
             findings.append(f)
 
-    runs_scanned  = stats.get("runsScanned", "—")
-    jobs_scanned  = stats.get("jobsScanned", "—")
-    secrets_found = stats.get("secretsFound", len(findings_raw))
+    # ── Infos plateforme ──────────────────────────────────────────────────────
+    first_f  = findings[0] if findings else findings_raw[0] if findings_raw else {}
+    platform = (stats.get("platform") or first_f.get("platform") or "—").upper()
+    repo_url = stats.get("repoUrl") or first_f.get("repoUrl") or ""
+
+    label_style = ParagraphStyle("pl_label", fontName="Helvetica-Bold", fontSize=8,
+        textColor=PL_COLOR, leading=11)
+    value_style = ParagraphStyle("pl_value", fontName="Helvetica", fontSize=8,
+        textColor=BLACK, leading=11)
+    mono_style  = ParagraphStyle("pl_mono",  fontName="Courier",   fontSize=7.5,
+        textColor=GRAY_DARK, leading=11)
+
+    platform_badge_style = ParagraphStyle("pl_badge", fontName="Helvetica-Bold",
+        fontSize=11, textColor=WHITE, leading=14, alignment=TA_CENTER)
+    badge_cell = Table(
+        [[Paragraph(platform, platform_badge_style)]],
+        colWidths=[usable * 0.18],
+    )
+    badge_cell.setStyle(TableStyle([
+        ("BACKGROUND",    (0,0),(-1,-1), PL_COLOR),
+        ("TOPPADDING",    (0,0),(-1,-1), 8),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 8),
+        ("LEFTPADDING",   (0,0),(-1,-1), 8),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 8),
+    ]))
+
+    repo_display = repo_url if repo_url else "—"
+    platform_info_data = [
+        [Paragraph("Plateforme :", label_style), Paragraph(platform, value_style)],
+        [Paragraph("Dépôt :",      label_style), Paragraph(repo_display, mono_style)],
+    ]
+    platform_info_cell = Table(platform_info_data,
+        colWidths=[usable * 0.16, usable * 0.62])
+    platform_info_cell.setStyle(TableStyle([
+        ("TOPPADDING",    (0,0),(-1,-1), 3),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 3),
+        ("LEFTPADDING",   (0,0),(-1,-1), 6),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 6),
+        ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
+    ]))
+
+    platform_row = Table(
+        [[badge_cell, platform_info_cell]],
+        colWidths=[usable * 0.20, usable * 0.80],
+    )
+    platform_row.setStyle(TableStyle([
+        ("VALIGN",       (0,0),(-1,-1), "MIDDLE"),
+        ("LEFTPADDING",  (0,0),(-1,-1), 0),
+        ("RIGHTPADDING", (0,0),(-1,-1), 0),
+        ("BOX",          (0,0),(-1,-1), 0.5, GRAY_MID),
+    ]))
+    story.append(platform_row)
+    story.append(Spacer(1, 4 * mm))
+
+    # ── KPIs ─────────────────────────────────────────────────────────────────
+    runs_scanned = stats.get("runsScanned", "—")
+    jobs_scanned = stats.get("jobsScanned", "—")
 
     by_type = defaultdict(int)
     for f in findings:
         by_type[f.get("secretType", "Unknown")] += 1
 
     kpi_items = [[
-        kpi_card("RUNS SCANNES",    runs_scanned,       PL_COLOR, s=s),
-        kpi_card("JOBS SCANNES",    jobs_scanned,       PL_COLOR, s=s),
-        kpi_card("SECRETS (dedup)", len(findings),      RED,      s=s),
-        kpi_card("TYPES DISTINCTS", len(by_type),       ORANGE,   s=s),
+        kpi_card("RUNS SCANNÉS",    runs_scanned,  PL_COLOR, s=s),
+        kpi_card("JOBS SCANNÉS",    jobs_scanned,  PL_COLOR, s=s),
+        kpi_card("SECRETS (dedup)", len(findings), RED,      s=s),
+        kpi_card("TYPES DISTINCTS", len(by_type),  ORANGE,   s=s),
     ]]
     kpi_row = Table(kpi_items, colWidths=[usable / 4] * 4, hAlign="LEFT")
     kpi_row.setStyle(TableStyle([
@@ -765,7 +837,7 @@ def build_pipeline_section(story, metrics, s, usable):
         story.append(Spacer(1, 4 * mm))
         return
 
-    # By-type summary
+    # ── Répartition par type ──────────────────────────────────────────────────
     for el in section_heading("Répartition par type", s, level=2, color=PL_COLOR):
         story.append(el)
 
@@ -784,14 +856,16 @@ def build_pipeline_section(story, metrics, s, usable):
     story.append(tt)
     story.append(Spacer(1, 4 * mm))
 
-    # Detailed findings
+    # ── Détail des findings ───────────────────────────────────────────────────
     for el in section_heading("Détail des secrets détectés", s, level=2, color=PL_COLOR):
         story.append(el)
 
     det_rows = [[
-        Paragraph("Pipeline/Branch", s["th_left"]), # Fusionné pour gagner de la place
+        Paragraph("Pipeline / Branch", s["th_left"]),
         Paragraph("Job", s["th_left"]),
-        Paragraph("Ligne", s["th"]),
+        Paragraph("Date / Heure", s["th_left"]),
+        Paragraph("Commit", s["th_left"]),
+        Paragraph("Lg", s["th"]),
         Paragraph("Type", s["th_left"]),
         Paragraph("Aperçu", s["th_left"]),
     ]]
@@ -806,10 +880,57 @@ def build_pipeline_section(story, metrics, s, usable):
     }
 
     for i, f in enumerate(findings, start=1):
-        # Création d'un identifiant combiné Pipeline/Branch
-        pipeline_info = f"{f.get('runName', '—')}<br/><font size='7' color='grey'>{f.get('branch', '')}</font>"
-        job_info = f"{f.get('jobName', '—')}<br/><font size='7'>{f.get('jobStatus', '')}</font>"
-        
+        run_url    = f.get("runUrl") or ""
+        f_platform = (f.get("platform") or "").lower()
+        job_id     = f.get("jobId")
+        run_name   = f.get("runName", "—")
+        branch     = f.get("branch", "")
+        job_name   = f.get("jobName", "—")
+        job_status = f.get("jobStatus", "")
+
+        # ── Lien sur le nom du pipeline (run) ────────────────────────────────
+        if run_url:
+            pipeline_info = (
+                f'<link href="{run_url}">{run_name}</link>'
+                f"<br/><font size='7' color='grey'>{branch}</font>"
+            )
+        else:
+            pipeline_info = (
+                f"{run_name}"
+                f"<br/><font size='7' color='grey'>{branch}</font>"
+            )
+
+        # ── Lien sur le nom du job, affiché en bleu souligné ─────────────────
+        if run_url and job_id:
+            if f_platform == "github":
+                job_url = f"{run_url}/job/{job_id}"
+            elif f_platform == "gitlab":
+                repo_base = f.get("repoUrl", "").rstrip("/").removesuffix(".git")
+                job_url = f"{repo_base}/-/jobs/{job_id}"
+            else:
+                job_url = run_url
+            job_info = (
+                f'<link href="{job_url}"><u><font color="#005191">{job_name}</font></u></link>'
+                f"<br/><font size='7'>{job_status}</font>"
+            )
+        else:
+            job_info = (
+                f"{job_name}"
+                f"<br/><font size='7'>{job_status}</font>"
+            )
+
+        # Date/heure : priorité jobStartedAt, sinon createdAt du run
+        dt_str = _fmt_dt(f.get("jobStartedAt") or f.get("createdAt"))
+
+        # Commit : SHA court + message tronqué sur une 2e ligne
+        sha       = _short_sha(f.get("commitSha"))
+        msg_raw   = f.get("commitMessage") or ""
+        msg_trunc = (msg_raw[:38] + "…") if len(msg_raw) > 38 else msg_raw
+        commit_info = (
+            f"<font name='Courier' size='7'>{sha}</font>"
+            + (f"<br/><font size='6.5' color='grey'>{msg_trunc}</font>" if msg_trunc else "")
+        )
+
         line        = str(f.get("line", "—"))
         secret_type = f.get("secretType", "—")
         preview     = f.get("preview", "—")
@@ -818,14 +939,16 @@ def build_pipeline_section(story, metrics, s, usable):
         det_rows.append([
             Paragraph(pipeline_info, s["td"]),
             Paragraph(job_info,      s["td"]),
+            Paragraph(dt_str,        s["td"]),
+            Paragraph(commit_info,   s["td"]),
             Paragraph(line,          s["td_center"]),
             Paragraph(secret_type,   s["td"]),
             Paragraph(preview,       s["td_mono"]),
         ])
-        style_cmds.append(("TEXTCOLOR", (3, i), (3, i), row_color))
-        style_cmds.append(("FONTNAME",  (3, i), (3, i), "Helvetica-Bold"))
+        style_cmds.append(("TEXTCOLOR", (5, i), (5, i), row_color))
+        style_cmds.append(("FONTNAME",  (5, i), (5, i), "Helvetica-Bold"))
 
-    col_ws = [usable * p for p in [0.25, 0.15, 0.08, 0.25, 0.27]]
+    col_ws = [usable * p for p in [0.20, 0.10, 0.13, 0.18, 0.05, 0.18, 0.16]]
     dt = Table(det_rows, colWidths=col_ws, repeatRows=1)
     dt.setStyle(TableStyle(style_cmds))
     story.append(dt)
@@ -1026,7 +1149,7 @@ def build_pdf(metrics_path, output_pdf):
             f"Outils : {outils}")
         c.setFont("Helvetica", 10)
         c.drawString(margin + 6 * mm, H - 59 * mm,
-            f"Généré le : {datetime.now().strftime('%d %B %Y à %H:%M')}")
+            f"Généré le : {now.strftime('%d %B %Y à %H:%M')}")
         _draw_footer(c, d)
 
     def later_page(c, d):
