@@ -26,7 +26,7 @@ function containerMessage(repoUrl, branch, message = null, accentColor = colors.
 }
 
 module.exports = {
-	async analyse(interaction, repoUrl, branch = null, analyses = {
+	async analyse(interaction, repoUrl, branch = null, commit = false, analyses = {
 		sonar: true,
 		semgrep: true,
 		trufflehog: true,
@@ -57,7 +57,7 @@ module.exports = {
 				components: [containerMessage(repoUrl, branch, 'Clonage du dépôt en cours...')],
 				flags: MessageFlags.IsComponentsV2,
 			});
-			const volumeId = await gitClone(repoUrl, branch);
+			const volumeId = await gitClone(repoUrl, branch, commit);
 			await interaction.editReply({ components: [containerMessage(repoUrl, branch)] });
 
 			// Génération d'une projectKey à partir de l'URL du repo pour conserver l'historique Sonar
@@ -75,7 +75,7 @@ module.exports = {
 				metrics.semgrep = await semgrep.analyse(interaction, volumeId, projectKey);
 			}
 			if (analyses.trufflehog) {
-				metrics.trufflehog = await trufflehog.analyse(interaction, volumeId, projectKey);
+				metrics.trufflehog = await trufflehog.analyse(interaction, volumeId, projectKey, commit);
 			}
 			if (analyses.pipeline) {
 				metrics.pipeline = await pipeline.analyse(interaction, volumeId, projectKey);
@@ -84,6 +84,12 @@ module.exports = {
 			metrics.info.repoUrl = repoUrl;
 			metrics.info.branch = branch || 'HEAD';
 			metrics.info.name = projectKey;
+			if (commit === true) {
+				metrics.info.commit = 'Oui';
+			}
+			else {
+				metrics.info.commit = 'Non';
+			}
 
 			// Génération du rapport PDF
 			const report = await generateReport(projectKey, volumeId, metrics);

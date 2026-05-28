@@ -5,7 +5,7 @@ const { devNull, stderrStream } = require('./utility');
 const docker = new Docker();
 
 module.exports = {
-	async gitClone(repoUrl, branch = null) {
+	async gitClone(repoUrl, branch = null, commit = false) {
 		const id = uniqueId();
 		console.log(`[Git][Clone] Cloning ${repoUrl} into docker volume ${id}`);
 		try {
@@ -13,12 +13,24 @@ module.exports = {
 			await docker.createVolume({ Name: id });
 
 			console.log(`[Git][Clone] Cloning into volume ${id} using temporary docker container`);
-			const cmd = [
-				'-c', 'core.askPass=echo',
-				'-c', 'credential.helper=',
-				'clone',
-				'--depth', '1',
-			];
+			let cmd;
+			if (commit === true) {
+				console.log(`[Git][Clone] Cloning full history for ${repoUrl}`);
+				cmd = [
+					'-c', 'core.askPass=echo',
+					'-c', 'credential.helper=',
+					'clone',
+				];
+			}
+			else {
+				console.log(`[Git][Clone] Cloning with --depth=1 for ${repoUrl}`);
+				cmd = [
+					'-c', 'core.askPass=echo',
+					'-c', 'credential.helper=',
+					'clone',
+					'--depth', '1',
+				];
+			}
 			if (branch) {
 				cmd.push('-b', branch);
 			}

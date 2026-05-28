@@ -4,18 +4,29 @@ const { PassThrough, Writable } = require('node:stream');
 const docker = new Docker();
 
 module.exports = {
-	async trufflehogAnalyze(volumeId) {
+	async trufflehogAnalyze(volumeId, commit) {
 		console.log(`[TruffleHog][Analyze] Launching analysis for volume ${volumeId}`);
 
 		// Vérifie que le volume existe
 		await docker.getVolume(volumeId).inspect();
 
-		const cmd = [
-			'filesystem',
-			'/repo',
-			'--json',
-			'--no-update',
-		];
+		let cmd;
+		if (commit === true) {
+			cmd = [
+				'git',
+				'file:///repo',
+				'--json',
+				'--no-update',
+			];
+		}
+		else {
+			cmd = [
+				'filesystem',
+				'/repo',
+				'--json',
+				'--no-update',
+			];
+		}
 
 		const outputStream = new PassThrough();
 		const chunks = [];
@@ -71,7 +82,14 @@ module.exports = {
 		const seen = new Set();
 
 		for (const item of results) {
-			const key = `${item.SourceMetadata.Data.Filesystem.file}:${item.SourceMetadata.Data.Filesystem.line}:${item.Raw}`;
+			const sourceData = item.SourceMetadata?.Data?.Git || item.SourceMetadata?.Data?.Filesystem;
+
+			const file = sourceData?.file || 'unknown';
+			const line = sourceData?.line || 0;
+			const secret = item.Raw || '';
+
+			const key = `${file}:${line}:${secret}`;
+
 			if (!seen.has(key)) {
 				uniqueResults.push(item);
 				seen.add(key);
@@ -79,5 +97,6 @@ module.exports = {
 		}
 
 		return uniqueResults;
+
 	},
 };

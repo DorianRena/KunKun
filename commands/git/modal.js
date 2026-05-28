@@ -12,7 +12,7 @@ const { analyse } = require('../../utility/analyse');
 module.exports = {
 	data: new SlashCommandBuilder()
 		.setName('modal')
-		.setDescription('Analyse GitHub repositories!'),
+		.setDescription('Analyse Git repositories!'),
 
 	async execute(interaction) {
 		const modal = new ModalBuilder()
@@ -25,8 +25,7 @@ module.exports = {
 			.setPlaceholder('https://github.com/user/repo')
 			.setRequired(true);
 		const urlInputLabel = new LabelBuilder()
-			.setLabel('git')
-			.setDescription('URL du dépôt GitHub')
+			.setLabel('URL du dépôt Git')
 			.setTextInputComponent(urlInput);
 
 		const branchInput = new TextInputBuilder()
@@ -35,8 +34,7 @@ module.exports = {
 			.setPlaceholder('main')
 			.setRequired(false);
 		const branchInputLabel = new LabelBuilder()
-			.setLabel('Branche du repo git à analysé (optionnel)')
-			.setDescription('Branche')
+			.setLabel('Branche du dépôt git à analysé (optionnel)')
 			.setTextInputComponent(branchInput);
 
 		const analysesSelect = new StringSelectMenuBuilder()
@@ -72,10 +70,32 @@ module.exports = {
 			.setLabel('Analyses à lancer')
 			.setStringSelectMenuComponent(analysesSelect);
 
+		const commitBoolSelect = new StringSelectMenuBuilder()
+			.setCustomId('commit')
+			.setPlaceholder('Analyse de l\'historique des commits ?')
+			.setRequired(true)
+			.setMinValues(1)
+			.setMaxValues(1)
+			.addOptions(
+				new StringSelectMenuOptionBuilder()
+					.setLabel('Non')
+					.setValue('false')
+					.setDefault(true),
+				new StringSelectMenuOptionBuilder()
+					.setLabel('Oui')
+					.setValue('true')
+					.setDefault(false),
+			);
+
+		const commitLabel = new LabelBuilder()
+			.setLabel('Analyse de l\'historique des commits')
+			.setStringSelectMenuComponent(commitBoolSelect);
+
 		modal.addLabelComponents(
 			urlInputLabel,
 			branchInputLabel,
 			analysesLabel,
+			commitLabel,
 		);
 
 		await interaction.showModal(modal);
@@ -90,7 +110,10 @@ module.exports = {
 		const semgrep = analyses.includes('semgrep');
 		const trufflehog = analyses.includes('trufflehog');
 		const pipeline = analyses.includes('pipeline');
+
+		const commitValue = interaction.fields.getField('commit').values[0] === 'true';
+
 		// Validations
-		await analyse(interaction, repoUrl, branch, { sonar, semgrep, trufflehog, pipeline });
+		await analyse(interaction, repoUrl, branch, commitValue, { sonar, semgrep, trufflehog, pipeline });
 	},
 };

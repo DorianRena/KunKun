@@ -115,7 +115,7 @@ def short_component(c):
     parts = c.split(":")
     return parts[-1] if parts else c
 
-def make_file_link(repo_url, file_path, line, platform, display_text, branch="HEAD"):
+def make_file_link(repo_url, file_path, line, platform, display_text, branch="HEAD", commit=None):
     """Retourne du markup ReportLab avec un lien cliquable vers le fichier dans GitLab/GitHub.
     Si repo_url est absent, retourne le texte sans lien."""
     if not repo_url or not file_path or file_path == "—":
@@ -123,7 +123,7 @@ def make_file_link(repo_url, file_path, line, platform, display_text, branch="HE
     repo_base = repo_url.rstrip("/").removesuffix(".git")
     plat = (platform or "").lower()
     clean_path = file_path.lstrip("/")
-    ref = branch if branch and branch not in ("", "HEAD") else "HEAD"
+    ref = commit if commit else (branch if branch and branch not in ("", "HEAD") else "HEAD")
     if "gitlab" in plat or "gitlab" in repo_base:
         url = f"{repo_base}/-/blob/{ref}/{clean_path}"
         if line and line != "—":
@@ -703,6 +703,9 @@ def build_trufflehog_section(story, metrics, s, usable):
         story.append(el)
     story.append(Spacer(1, 2 * mm))
 
+    # Récupération des données sources pour déterminer si c'est un repo git ou filesystem
+    has_commit = metrics.get("info", {}).get("commit", {}) or "Non"
+
     # Statistiques basées sur les données déjà dédoublonnées (findings)
     by_detector = defaultdict(int)
     for f in findings:
@@ -711,9 +714,10 @@ def build_trufflehog_section(story, metrics, s, usable):
     kpi_items = [[
         kpi_card("TOTAL DÉTECTIONS", len(findings), TH_COLOR, s=s),
         kpi_card("TYPES UNIQUES", len(by_detector), PURPLE, s=s),
+        kpi_card("AVEC COMMIT", has_commit, BLUE, s=s), # Ajout ici
     ]]
     
-    kpi_row = Table(kpi_items, colWidths=[usable / 2, usable / 2], hAlign="CENTER")
+    kpi_row = Table(kpi_items, colWidths=[usable / 3, usable / 3, usable / 3], hAlign="CENTER")
     kpi_row.setStyle(TableStyle([
         ("LEFTPADDING", (0,0), (-1,-1), 2), 
         ("RIGHTPADDING", (0,0), (-1,-1), 2),
@@ -747,8 +751,10 @@ def build_trufflehog_section(story, metrics, s, usable):
     
     for f in findings:
         data = f.get("SourceMetadata", {}).get("Data", {})
-        fs = data.get("Filesystem", {})
-        
+        git_data = data.get("Git")
+        fs_data = data.get("Filesystem")
+        fs = git_data or fs_data or {}        
+
         # Logique d'anonymisation
         raw = f.get("Raw", "")
         display = f.get("Redacted")
@@ -758,7 +764,9 @@ def build_trufflehog_section(story, metrics, s, usable):
         path = fs.get("file", "—").replace("/repo/", "")
         line = str(fs.get("line", "—"))
         loc_display = f"{path} <b>L.{line}</b>"
-        loc = make_file_link(repo_url, path, line, platform, loc_display, branch=branch)
+        
+        commit = git_data.get("commit") if git_data else None
+        loc = make_file_link(repo_url, path, line, platform, loc_display, branch=branch, commit=commit)
         
         rows.append([
             Paragraph(display, s["td_mono"]),
@@ -1041,7 +1049,7 @@ def build_cover(story, metrics, s, usable, sections_present):
         seen_th = set()
         for f in th:
             data = f.get("SourceMetadata",{}).get("Data",{})
-            fs = data.get("Filesystem",{})
+            fs = data.get("Git", {}) or data.get("Filesystem", {})
             key = (fs.get("file",""), fs.get("line",0), f.get("DetectorName",""), f.get("Raw",""))
             if key not in seen_th:
                 seen_th.add(key)

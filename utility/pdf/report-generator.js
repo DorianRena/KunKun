@@ -18,6 +18,8 @@ module.exports = {
 			metrics.sonar.csvFile = csvFile;
 		}
 
+		console.log(JSON.stringify(metrics, null, 2));
+
 		// Write metrics.json to the OS temp directory (cross-platform)
 		const metricsFilename = `${today}-${sanitizedProjectKey}-metrics.json`;
 		const metricsHostPath = path.join(os.tmpdir(), metricsFilename);

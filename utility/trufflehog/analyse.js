@@ -9,7 +9,7 @@ function containerMessage(message, accentColor = colors.log) {
 }
 
 module.exports = {
-	async analyse(interaction, volumeId, projectKey) {
+	async analyse(interaction, volumeId, projectKey, commit = false) {
 		const message = await interaction.fetchReply();
 		const components = message.components;
 		await interaction.editReply({
@@ -18,7 +18,7 @@ module.exports = {
 			flags: MessageFlags.IsComponentsV2,
 		});
 		try {
-			const findings = await trufflehogAnalyze(volumeId);
+			const findings = await trufflehogAnalyze(volumeId, commit);
 			console.log(`[Analysis] TruffleHog: ${findings.length} finding(s)`);
 			interaction.client.projectCache[projectKey].trufflehog = {};
 			interaction.client.projectCache[projectKey].trufflehog.findings = findings;

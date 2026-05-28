@@ -146,7 +146,22 @@ module.exports = {
 			?? null;
 		const commit = finding.SourceMetadata?.Data?.Git?.commit ?? null;
 
-		const fileUrl = repoUrl ? `${repoUrl.replace(/\/tree\//, '/blob/')}/${file}${line ? `#L${line}` : ''}` : null;
+		let baseUrl = repoUrl.replace(/\/$/, '');
+		if (commit) {
+			const branchRegex = /(\/-\/|\/)(tree|blob)\/.+$/;
+			if (branchRegex.test(baseUrl)) {
+				baseUrl = baseUrl.replace(branchRegex, `$1blob/${commit}`);
+			}
+			else {
+				const isGitLab = baseUrl.includes('gitlab');
+				baseUrl = isGitLab ? `${baseUrl}/-/blob/${commit}` : `${baseUrl}/blob/${commit}`;
+			}
+		}
+		else {
+			baseUrl = baseUrl.replace(/\/tree\//, '/blob/');
+		}
+		const fileUrl = `${baseUrl}/${file}${line ? `#L${line}` : ''}`;
+
 		const fileValue = fileUrl ? `[${file}:${line ?? '?'}](${fileUrl})` : `${file}:${line ?? '?'}`;
 
 		const accentColor = finding.Verified ? colors.error : colors.warning;
