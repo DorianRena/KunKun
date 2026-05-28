@@ -63,14 +63,14 @@ module.exports = {
 				`${lines} ligne(s) analysé(s)`,
 			].join('\n')))
 			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(t => t.setContent(languagesText))
-			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 			.addTextDisplayComponents(t => t.setContent(`### ${statusEmoji} Quality Gate : ${status}`))
+			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(t => t.setContent(languagesText))
 			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 			.addTextDisplayComponents(t => t.setContent([
 				`📊 **Couverture** : ${coverage === 'N/A' ? 'N/A' : `${coverage}%`}`,
 				`⚖️ **Duplications** : ${duplications === 'N/A' ? 'N/A' : `${duplications}%`}`,
-				'======',
+				'',
 				`🔒 **Vulnérabilités** : ${vulnerabilities}`,
 				`🐛 **Bugs** : ${bugs}`,
 				`💧 **Code Smells** : ${codeSmells}`,

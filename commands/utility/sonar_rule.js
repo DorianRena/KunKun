@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, MessageFlags } = require('discord.js');
-const { showRule } = require('../../utility/sonar/utility');
+const { getAndShowRule } = require('../../utility/sonar/utility');
 
 module.exports = {
 	data: new SlashCommandBuilder().setName('sonar_rule').setDescription('Show sonar rule description')
@@ -7,6 +7,6 @@ module.exports = {
 	async execute(interaction) {
 		const ruleKey = interaction.options.getString('rule_key');
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-		await showRule(ruleKey, interaction);
+		await getAndShowRule(ruleKey, interaction);
 	},
 };

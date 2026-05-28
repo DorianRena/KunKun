@@ -3,7 +3,7 @@ const { showRule } = require('./interactive-report');
 const { MessageFlags } = require('discord.js');
 
 const utils = {
-	async showRule(ruleKey, interaction, tab = 'root_cause') {
+	async getAndShowRule(ruleKey, interaction, tab = 'root_cause') {
 		try {
 			const rule = await sonarApi.fetchRule(ruleKey);
 			if (!rule) {

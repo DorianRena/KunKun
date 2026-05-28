@@ -14,7 +14,7 @@ const { setup, teardown } = require('./utility/docker/utility');
 const { handleModal } = require('./commands/git/modal');
 const sonarApi = require('./utility/sonar/sonar-api');
 const { createIssuesSelectMenu, showIssueDetail } = require('./utility/sonar/interactive-report');
-const { showRule } = require('./utility/sonar/utility');
+const { getAndShowRule } = require('./utility/sonar/utility');
 const semgrepReport = require('./utility/semgrep/interactive-report');
 const trufflehogReport = require('./utility/trufflehog/interactive-report');
 const pipelineReport = require('./utility/pipeline/interactive-report');
@@ -174,7 +174,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 	if (interaction.isButton() && interaction.customId.startsWith('sonar_rule:')) {
 		const ruleKey = interaction.customId.split('sonar_rule:')[1];
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-		await showRule(ruleKey, interaction);
+		await getAndShowRule(ruleKey, interaction);
 	}
 	// Tab switcher sur la règle (Pourquoi / Comment corriger)
 	if (interaction.isButton() && interaction.customId.startsWith('sonar_rule_tab:')) {
@@ -182,7 +182,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 		const ruleKey = rest.join(':');
 
 		await interaction.deferUpdate();
-		await showRule(ruleKey, interaction, tab);
+		await getAndShowRule(ruleKey, interaction, tab);
 	}
 
 	// SEMGREP
