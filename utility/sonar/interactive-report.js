@@ -35,8 +35,13 @@ module.exports = {
 		const files = metrics.measures?.find((m) => m.metric === 'files')?.value || 'N/A';
 		const lines = metrics.measures?.find((m) => m.metric === 'lines')?.value || 'N/A';
 		let linesDistribution = metrics.measures?.find((m) => m.metric === 'ncloc_language_distribution')?.value || '';
-		linesDistribution = linesDistribution.split(';').map(line => line.split('='));
-
+		linesDistribution = linesDistribution.split(';').map(line => {
+			const [language, value] = line.split('=');
+			return [
+				language === '<null>' ? 'other' : language,
+				parseInt(value, 10),
+			];
+		});
 		const vulnerabilities = parseInt(metrics.measures?.find((m) => m.metric === 'vulnerabilities')?.value || 0, 10);
 		const bugs = parseInt(metrics.measures?.find((m) => m.metric === 'bugs')?.value || 0, 10);
 		const codeSmells = parseInt(metrics.measures?.find((m) => m.metric === 'code_smells')?.value || 0, 10);

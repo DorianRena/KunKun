@@ -17,6 +17,7 @@ module.exports = {
 				'-c', 'core.askPass=echo',
 				'-c', 'credential.helper=',
 				'clone',
+				'--depth', '1',
 			];
 			if (branch) {
 				cmd.push('-b', branch);
