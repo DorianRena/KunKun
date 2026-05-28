@@ -1,12 +1,14 @@
 const {
-	EmbedBuilder,
 	ActionRowBuilder,
 	ButtonBuilder,
 	ButtonStyle,
 	StringSelectMenuBuilder,
 	StringSelectMenuOptionBuilder,
+	ContainerBuilder,
+	SeparatorSpacingSize,
 } = require('discord.js');
 const TurndownService = require('turndown');
+const { colors } = require('../../config');
 
 const turndownService = new TurndownService();
 turndownService.addRule('code', {
@@ -14,10 +16,7 @@ turndownService.addRule('code', {
 	replacement: (content, node) => `\`\`\`\n${node.textContent}\n\`\`\``,
 });
 
-const tabColors = {
-	root_cause: 0x4A90D9,
-	how_to_fix: 0x2ECC71,
-};
+const tabColors = colors.ruleTabs;
 
 function buildFileUrl(repoUrl, component, line) {
 	const filePath = component.split(':').at(-1);
@@ -30,74 +29,85 @@ module.exports = {
 	 * Create an interactive Sonar report with buttons to view issues by type.
 	 * @param {object} metrics - SonarQube component metrics
 	 * @param {string} projectKey - SonarQube project key
-	 * @param {string} repoUrl - GitHub repository URL
-	 * @param branch
-	 * @returns {object} { embed, actionRow } for Discord message
+	 * @returns ContainerBuilder container
 	 */
-	createInteractiveReport(metrics, projectKey, repoUrl, branch = null) {
-		repoUrl = repoUrl.replace(/\.git$/, '');
-		repoUrl = `${repoUrl}/tree/${branch ?? 'HEAD'}`;
+	createInteractiveReport(metrics, projectKey) {
+		const files = metrics.measures?.find((m) => m.metric === 'files')?.value || 'N/A';
+		const lines = metrics.measures?.find((m) => m.metric === 'lines')?.value || 'N/A';
+		let linesDistribution = metrics.measures?.find((m) => m.metric === 'ncloc_language_distribution')?.value || '';
+		linesDistribution = linesDistribution.split(';').map(line => line.split('='));
 
-		const bugs = parseInt(
-			metrics.measures?.find((m) => m.metric === 'bugs')?.value || 0,
-			10,
-		);
-		const vulnerabilities = parseInt(
-			metrics.measures?.find((m) => m.metric === 'vulnerabilities')?.value || 0,
-			10,
-		);
-		const codeSmells = parseInt(
-			metrics.measures?.find((m) => m.metric === 'code_smells')?.value || 0,
-			10,
-		);
+		const vulnerabilities = parseInt(metrics.measures?.find((m) => m.metric === 'vulnerabilities')?.value || 0, 10);
+		const bugs = parseInt(metrics.measures?.find((m) => m.metric === 'bugs')?.value || 0, 10);
+		const codeSmells = parseInt(metrics.measures?.find((m) => m.metric === 'code_smells')?.value || 0, 10);
 		const coverage = metrics.measures?.find((m) => m.metric === 'coverage')?.value || 'N/A';
 		const duplications = metrics.measures?.find((m) => m.metric === 'duplicated_lines_density')?.value || 'N/A';
 		const status = metrics.measures?.find((m) => m.metric === 'alert_status')?.value || 'NONE';
 
 		const statusEmoji = status === 'OK' ? '🟢' : status === 'WARN' ? '🟡' : '🔴';
+		const accentColor = status === 'OK' ? colors.good : status === 'WARN' ? colors.warning : colors.error;
 
-		const embed = new EmbedBuilder()
-			.setColor(status === 'OK' ? 0x228B22 : status === 'WARN' ? 0xFFA500 : 0xFF6347)
-			.setTitle('📊 Rapport SonarQube')
-			.setURL(repoUrl)
-			.setDescription(`Analyse du dépôt GitHub : ${repoUrl}\nBranche : ${branch ? branch : 'par défaut'}`)
-			.addFields(
-				{ name: `${statusEmoji} Qualité`, value: status, inline: true },
-				{ name: '🐛 Bugs', value: `${bugs}`, inline: true },
-				{ name: '🔒 Vulnérabilités', value: `${vulnerabilities}`, inline: true },
-				{ name: '💧 Code Smells', value: `${codeSmells}`, inline: true },
-				{ name: '📊 Couverture', value: `${coverage}%`, inline: true },
-				{ name: '⚖️ Duplications', value: `${duplications}%`, inline: true },
-			)
-			.setFooter({ text: 'Cliquez sur les boutons pour voir les détails' })
-			.setTimestamp();
+		const languagesText = linesDistribution
+			.map((language) => {
+				const percentLine = Math.floor(language[1] / lines * 100);
 
-		const row = new ActionRowBuilder()
-			.addComponents(
-				new ButtonBuilder()
-					.setCustomId(`sonar:bugs:${projectKey}`)
-					.setLabel(`🐛 Bugs (${bugs})`)
-					.setStyle(ButtonStyle.Primary)
-					.setDisabled(bugs === 0),
-				new ButtonBuilder()
-					.setCustomId(`sonar:vulnerabilities:${projectKey}`)
-					.setLabel(`🔒 Vulnérabilités (${vulnerabilities})`)
-					.setStyle(ButtonStyle.Danger)
-					.setDisabled(vulnerabilities === 0),
-				new ButtonBuilder()
-					.setCustomId(`sonar:code_smells:${projectKey}`)
-					.setLabel(`💧 Code Smells (${codeSmells})`)
-					.setStyle(ButtonStyle.Secondary)
-					.setDisabled(codeSmells === 0),
-			);
+				return `${language[0]}: ${language[1]} ligne(s), ${percentLine}% des lignes`;
+			})
+			.join('\n');
 
-		return { embed, actionRow: row, metrics };
+		const container = new ContainerBuilder()
+			.setAccentColor(accentColor)
+			.addTextDisplayComponents(t => t.setContent([
+				'## 📊 Rapport SonarQube',
+				`${files} fichier(s) analysé(s)`,
+				`${lines} ligne(s) analysé(s)`,
+			].join('\n')))
+			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(t => t.setContent(languagesText))
+			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(t => t.setContent(`### ${statusEmoji} Quality Gate : ${status}`))
+			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(t => t.setContent([
+				`📊 **Couverture** : ${coverage === 'N/A' ? 'N/A' : `${coverage}%`}`,
+				`⚖️ **Duplications** : ${duplications === 'N/A' ? 'N/A' : `${duplications}%`}`,
+			].join('\n')))
+			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(t => t.setContent([
+				`🔒 **Vulnérabilités** : ${vulnerabilities}`,
+				`🐛 **Bugs** : ${bugs}`,
+				`💧 **Code Smells** : ${codeSmells}`,
+			].join('\n')));
+
+		if (vulnerabilities || bugs || codeSmells) {
+			const issueSelect = new StringSelectMenuBuilder()
+				.setCustomId(`sonar_issues:${projectKey}`)
+				.setPlaceholder('📋 Choisir un type de problème')
+				.addOptions(
+					new StringSelectMenuOptionBuilder()
+						.setLabel('Vulnérabilités')
+						.setValue('vulnerabilities')
+						.setEmoji('🔒'),
+					new StringSelectMenuOptionBuilder()
+						.setLabel('Bugs')
+						.setValue('bugs')
+						.setEmoji('🐛'),
+					new StringSelectMenuOptionBuilder()
+						.setLabel('Code Smells')
+						.setValue('code_smells')
+						.setEmoji('💧'),
+				);
+			const issueRow = new ActionRowBuilder().addComponents(issueSelect);
+			container
+				.addActionRowComponents(issueRow);
+		}
+		return container;
 	},
 
 	/**
 	 * Create a select menu for an array of issues.
 	 * @param {Array} issues - Array of SonarQube issues
-	 * @param {string} type - Issue type code (bugs, vulnerabilities, codeSmells)
+	 * @param {string} type - Issue type code (bugs, vulnerabilities, code_smells)
+	 * @param {string} projectKey
 	 * @returns {ActionRowBuilder}
 	 */
 	createIssuesSelectMenu(issues, type, projectKey) {
@@ -118,15 +128,14 @@ module.exports = {
 		return new ActionRowBuilder().addComponents(selectMenu);
 	},
 
-	createIssueDetailEmbed(issue, repoUrl) {
-		const severityColors = {
-			BLOCKER: 0xFF0000,
-			CRITICAL: 0xFF4500,
-			MAJOR: 0xFFA500,
-			MINOR: 0xFFD700,
-			INFO: 0x87CEEB,
-		};
-
+	/**
+	 * Create a Components V2 message for issue detail.
+	 * @param {object} issue
+	 * @param {string} repoUrl
+	 * @returns ContainerBuilder
+	 */
+	showIssueDetail(issue, repoUrl) {
+		const severityColors = colors.severity;
 		const severityEmojis = {
 			BLOCKER: '🔴',
 			CRITICAL: '🟠',
@@ -135,30 +144,14 @@ module.exports = {
 			INFO: 'ℹ️',
 		};
 
-		const fileUrl = repoUrl ? buildFileUrl(repoUrl, issue.component, issue.line) : null;
+		const fileUrl = buildFileUrl(repoUrl, issue.component, issue.line);
 		const fileValue = fileUrl
 			? `[${issue.component?.split(':').at(-1)}:${issue.line}](${fileUrl})`
-			: issue.component;
+			: `${issue.component}:${issue.line}`;
 
-		const embed = new EmbedBuilder()
-			.setColor(severityColors[issue.severity] || 0x808080)
-			.setTitle(`${severityEmojis[issue.severity]} ${issue.message}`)
-			.addFields(
-				{ name: '📁 Fichier', value: fileValue, inline: false },
-				{ name: '📍 Ligne', value: `${issue.line}`, inline: true },
-				{ name: '⚠️ Sévérité', value: issue.severity, inline: true },
-				{ name: '🏷️ Type', value: issue.type, inline: true },
-			)
-			.setFooter({ text: `Issue: ${issue.key}` })
-			.setTimestamp();
-
-		if (issue.textRange) {
-			embed.addFields({
-				name: '📝 Contexte',
-				value: `Début: ligne ${issue.textRange.startLine}${issue.textRange.startOffset ? ` (offset ${issue.textRange.startOffset})` : ''}`,
-				inline: false,
-			});
-		}
+		const contextLine = issue.textRange
+			? `\n📝 **Contexte** : Début ligne ${issue.textRange.startLine}${issue.textRange.startOffset ? ` (offset ${issue.textRange.startOffset})` : ''}`
+			: '';
 
 		const row = new ActionRowBuilder().addComponents(
 			new ButtonBuilder()
@@ -167,26 +160,43 @@ module.exports = {
 				.setStyle(ButtonStyle.Secondary),
 		);
 
-		return { embed, row };
+		return new ContainerBuilder()
+			.setAccentColor(severityColors[issue.severity] || colors.log)
+			.addTextDisplayComponents(
+				(t) => t.setContent(`## ${severityEmojis[issue.severity]} ${issue.message}`),
+				(t) => t.setContent(
+					[
+						`📁 **Fichier** : ${fileValue}`,
+						`📍 **Ligne** : ${issue.line}`,
+						`⚠️ **Sévérité** : ${issue.severity}`,
+						`🏷️ **Type** : ${issue.type}${contextLine}`,
+					].join('\n'),
+				),
+				(t) => t.setContent(`*Issue : ${issue.key}*`),
+			)
+			.addSeparatorComponents((s) => s.setDivider(false).setSpacing(SeparatorSpacingSize.Small))
+			.addActionRowComponents((r) => r.setComponents(...row.components));
 	},
 
-	createRuleEmbed(rule, tab = 'root_cause') {
-		const sectionKeyMap = {
-			root_cause: 'root_cause',
-			how_to_fix: 'how_to_fix',
-		};
+	/**
+	 * Create a Components V2 message for rule detail.
+	 * @param {object} rule
+	 * @param {string} tab - 'root_cause' | 'how_to_fix'
+	 * @returns ContainerBuilder
+	 */
+	showRule(rule, tab = 'root_cause') {
+		const sectionKey = tab === 'how_to_fix' ? 'how_to_fix' : 'root_cause';
 
-		const sectionKey = sectionKeyMap[tab] || 'root_cause';
-
-		const descriptionHTML = rule.descriptionSections.find(s => s.key === sectionKey).content;
-		const description = turndownService.turndown(descriptionHTML).slice(0, 4096) || 'Pas de description disponible';
+		const descriptionHTML = rule.descriptionSections.find(s => s.key === sectionKey)?.content ?? '';
+		// Limite à 3800 pour laisser de la marge au reste du texte dans le container (max 4000)
+		const description = turndownService.turndown(descriptionHTML).slice(0, 3800) || 'Pas de description disponible';
 
 		const tabLabels = {
 			root_cause: '❓ Pourquoi c\'est un problème',
 			how_to_fix: '🔧 Comment le corriger',
 		};
 
-		const row = new ActionRowBuilder().addComponents(
+		const tabRow = new ActionRowBuilder().addComponents(
 			new ButtonBuilder()
 				.setCustomId(`sonar_rule_tab:root_cause:${rule.key}`)
 				.setLabel('❓ Pourquoi')
@@ -199,19 +209,24 @@ module.exports = {
 				.setDisabled(tab === 'how_to_fix'),
 		);
 
-		const title = `📖 ${rule.name} (${rule.key})\n\n${tabLabels[tab]}`;
-		const embed = new EmbedBuilder()
-			.setColor(tabColors[tab] ?? 0x4A90D9)
-			.setTitle(title.slice(0, 256))
-			.setDescription(description)
-			.addFields(
-				{ name: '🏷️ Nom', value: rule.name || 'N/A', inline: false },
-				{ name: '⚠️ Sévérité', value: rule.severity || 'N/A', inline: true },
-				{ name: '🏷️ Type', value: rule.type || 'N/A', inline: true },
+		return new ContainerBuilder()
+			.setAccentColor(tabColors[tab] ?? colors.info)
+			.addTextDisplayComponents(
+				(t) => t.setContent(`## 📖 ${rule.name}\n*${rule.key}*`),
+				(t) => t.setContent(
+					[
+						`🏷️ **Nom** : ${rule.name || 'N/A'}`,
+						`⚠️ **Sévérité** : ${rule.severity || 'N/A'}`,
+						`🏷️ **Type** : ${rule.type || 'N/A'}`,
+					].join('\n'),
+				),
 			)
-			.setFooter({ text: 'SonarQube Rule' })
-			.setTimestamp();
-
-		return { embed, row };
+			.addSeparatorComponents((s) => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(
+				(t) => t.setContent(`**${tabLabels[tab]}**`),
+				(t) => t.setContent(description),
+			)
+			.addSeparatorComponents((s) => s.setDivider(false).setSpacing(SeparatorSpacingSize.Small))
+			.addActionRowComponents((r) => r.setComponents(...tabRow.components));
 	},
 };

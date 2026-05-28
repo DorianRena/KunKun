@@ -1,13 +1,23 @@
 // Require the necessary discord.js classes
-const { Client, Collection, Events, GatewayIntentBits, MessageFlags } = require('discord.js');
+const {
+	Client,
+	Collection,
+	Events,
+	GatewayIntentBits,
+	MessageFlags,
+	TextDisplayBuilder,
+} = require('discord.js');
 const path = require('node:path');
 const fs = require('node:fs');
 const config = require('./config');
 const { setup, teardown } = require('./utility/docker/utility');
 const { handleModal } = require('./commands/git/modal');
 const sonarApi = require('./utility/sonar/sonar-api');
-const { createIssuesSelectMenu, createIssueDetailEmbed, createRuleEmbed } = require('./utility/sonar/interactive-report');
+const { createIssuesSelectMenu, showIssueDetail } = require('./utility/sonar/interactive-report');
 const { showRule } = require('./utility/sonar/utility');
+const semgrepReport = require('./utility/semgrep/interactive-report');
+const trufflehogReport = require('./utility/trufflehog/interactive-report');
+const pipelineReport = require('./utility/pipeline/interactive-report');
 
 // Validate required configuration at startup
 try {
@@ -23,9 +33,8 @@ const token = config.discord.token;
 // Create a new client instance
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// When the client is ready, run this code (only once).
-// The distinction between `client: Client<boolean>` and `readyClient: Client<true>` is important for TypeScript developers.
-// It makes some properties non-nullable.
+client.projectCache = {};
+
 client.once(Events.ClientReady, (readyClient) => {
 	console.log(`Ready! Logged in as ${readyClient.user.tag}`);
 });
@@ -40,7 +49,6 @@ for (const folder of commandFolders) {
 	for (const file of commandFiles) {
 		const filePath = path.join(commandsPath, file);
 		const command = require(filePath);
-		// Set a new item in the Collection with the key as the command name and the value as the exported module
 		if ('data' in command && 'execute' in command) {
 			client.commands.set(command.data.name, command);
 		}
@@ -77,59 +85,50 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			}
 		}
 	}
+
 	if (interaction.isModalSubmit() && interaction.customId === 'analyse-modal') {
 		await handleModal(interaction);
 	}
 
-	// Sonar button handlers (bugs, vulnerabilities, code smells)
-	if (interaction.isButton() && interaction.customId.startsWith('sonar:')) {
-		const [, issueType, ...rest] = interaction.customId.split(':');
-		const projectKey = rest.join(':');
+	// SONAR
+	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('sonar_issues:')) {
+		const projectKey = interaction.customId.replace('sonar_issues:', '');
+		const type = interaction.values[0];
+
 		const typeMap = {
 			bugs: 'BUG',
 			vulnerabilities: 'VULNERABILITY',
 			code_smells: 'CODE_SMELL',
 		};
-		const sonarType = typeMap[issueType];
 
+		const sonarType = typeMap[type];
 		if (!sonarType) return;
 
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-		try {
-			if (!projectKey) {
-				await interaction.editReply('❌ Impossible de récupérer la clé du projet');
-				return;
-			}
+		const issues = await sonarApi.fetchIssues(projectKey, sonarType);
 
-			// Fetch issues
-			const issues = await sonarApi.fetchIssues(projectKey, sonarType);
-
-			if (issues.length === 0) {
-				await interaction.editReply(`✅ Aucun ${issueType} détecté !`);
-				return;
-			}
-
-			// Create select menu
-			const selectMenu = createIssuesSelectMenu(issues, issueType, projectKey);
-			await interaction.editReply({
-				content: `📋 Sélectionnez une issue parmi les ${issues.length} ${issueType}`,
-				components: [selectMenu],
+		if (!issues.length) {
+			return interaction.editReply({
+				components: [
+					new TextDisplayBuilder().setContent(`Aucun ${type} trouvé`),
+				],
+				flags: MessageFlags.IsComponentsV2,
 			});
-
-			// Store issues in interaction data for later selection
-			interaction.client.sonarIssueCache = interaction.client.sonarIssueCache || {};
-			const originalEmbed = interaction.message.embeds[0];
-			const repoUrl = originalEmbed?.url || '';
-
-			interaction.client.sonarIssueCache[`${projectKey}_${issueType}`] = { issues, repoUrl };
 		}
-		catch (err) {
-			console.error(`[Sonar] Button error for ${issueType}:`, err.message);
-			await interaction.editReply(`❌ Erreur: ${err.message}`);
-		}
+		interaction.client.projectCache[projectKey].sonar[type] = issues;
+		const selectMenu = createIssuesSelectMenu(issues, type, projectKey);
+
+		return interaction.editReply({
+			components: [
+				new TextDisplayBuilder().setContent(
+					`📋 ${issues.length} issues trouvées pour ${type}`,
+				),
+				selectMenu,
+			],
+			flags: MessageFlags.IsComponentsV2,
+		});
 	}
-
 	// Sonar select menu handlers
 	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('sonar_select:')) {
 		const [, issueType, ...rest] = interaction.customId.split(':');
@@ -141,37 +140,42 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 		try {
 			if (!projectKey) {
-				await interaction.editReply('❌ Impossible de récupérer la clé du projet');
+				await interaction.editReply({
+					components: [new TextDisplayBuilder().setContent('❌ Impossible de récupérer la clé du projet')],
+					flags: MessageFlags.IsComponentsV2,
+				});
 				return;
 			}
 
-			// Get issues from cache
-			const cached = interaction.client.sonarIssueCache?.[`${projectKey}_${issueType}`];
+			const issue = interaction.client.projectCache[projectKey]?.sonar?.[issueType]?.[issueIndex];
 
-			if (!cached?.issues[issueIndex]) {
-				await interaction.editReply('❌ Issue non trouvée');
+			if (!issue) {
+				await interaction.editReply({
+					components: [new TextDisplayBuilder().setContent('❌ Issue non trouvée')],
+					flags: MessageFlags.IsComponentsV2,
+				});
 				return;
 			}
-			const { issues, repoUrl } = cached;
 
-			const issue = issues[issueIndex];
-			const { embed, row } = createIssueDetailEmbed(issue, repoUrl);
-
-			await interaction.editReply({ embeds: [embed], components: [row] });
+			const repoUrl = interaction.client.projectCache[projectKey].withBranch;
+			const container = showIssueDetail(issue, repoUrl);
+			await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
 		}
 		catch (err) {
-			console.log(err);
 			console.error('[Sonar] Select menu error:', err.message);
-			await interaction.editReply(`❌ Erreur: ${err.message}`);
+			console.error(err);
+			await interaction.editReply({
+				components: [new TextDisplayBuilder().setContent(`❌ Erreur: ${err.message}`)],
+				flags: MessageFlags.IsComponentsV2,
+			});
 		}
 	}
-
+	// Sonar show rule detail
 	if (interaction.isButton() && interaction.customId.startsWith('sonar_rule:')) {
 		const ruleKey = interaction.customId.split('sonar_rule:')[1];
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 		await showRule(ruleKey, interaction);
 	}
-
 	// Tab switcher sur la règle (Pourquoi / Comment corriger)
 	if (interaction.isButton() && interaction.customId.startsWith('sonar_rule_tab:')) {
 		const [, tab, ...rest] = interaction.customId.split(':');
@@ -180,9 +184,163 @@ client.on(Events.InteractionCreate, async (interaction) => {
 		await interaction.deferUpdate();
 		await showRule(ruleKey, interaction, tab);
 	}
+
+	// SEMGREP
+	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('semgrep_severity:')) {
+		const projectKey = interaction.customId.replace('semgrep_severity:', '');
+		const severity = interaction.values[0];
+
+		await interaction.deferReply({
+			flags: MessageFlags.Ephemeral,
+		});
+
+		const results = interaction.client.projectCache[projectKey]?.semgrep?.results;
+
+		if (!results) {
+			return interaction.editReply({
+				content: '❌ Résultats expirés, relancez l’analyse.',
+			});
+		}
+		const issues = results.filter((r) => (r.extra?.severity || 'WARNING').toUpperCase() === severity);
+		interaction.client.projectCache[projectKey].semgrep[severity] = issues;
+		if (!issues.length) {
+			return interaction.editReply({
+				components: [
+					new TextDisplayBuilder().setContent(`Aucun(e) ${severity} trouvé`),
+				],
+				flags: MessageFlags.IsComponentsV2,
+			});
+		}
+
+		const selectRow = semgrepReport.createIssuesSelectMenu(issues, severity, projectKey);
+		await interaction.editReply({
+			components: [
+				new TextDisplayBuilder().setContent(
+					`📋 ${issues.length} résultat(s) ${severity}`,
+				),
+				selectRow,
+			],
+			flags: MessageFlags.IsComponentsV2,
+		});
+	}
+	// Select menu
+	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('semgrep_select:')) {
+		const [, severity, ...rest] = interaction.customId.split(':');
+		const projectKey = rest.join(':');
+		const idx = parseInt(interaction.values[0], 10);
+
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+		const finding = interaction.client.projectCache[projectKey]?.semgrep?.[severity]?.[idx];
+		if (!finding) return interaction.editReply('❌ Résultat introuvable.');
+		const repoUrl = interaction.client.projectCache[projectKey].withBranch;
+		const container = semgrepReport.showFindingDetail(finding, repoUrl);
+		await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+	}
+
+	// TRUFFLEHOG
+	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('trufflehog_detector:')) {
+		const projectKey = interaction.customId.replace('trufflehog_detector:', '');
+		const detectorName = interaction.values[0];
+
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		const cached = interaction.client.projectCache[projectKey].trufflehog;
+		if (!cached) {
+			return interaction.editReply({
+				components: [new TextDisplayBuilder().setContent('❌ Résultats expirés, relancez l\'analyse.')],
+				flags: MessageFlags.IsComponentsV2,
+			});
+		}
+
+		const findings = cached.findings.filter(f => f.DetectorName === detectorName);
+		interaction.client.projectCache[projectKey].trufflehog[detectorName] = findings;
+
+		if (!findings.length) {
+			return interaction.editReply({
+				components: [new TextDisplayBuilder().setContent(`Aucun résultat pour ${detectorName}`)],
+				flags: MessageFlags.IsComponentsV2,
+			});
+		}
+
+		const selectRow = trufflehogReport.createFindingsSelectMenu(findings, detectorName, projectKey);
+		await interaction.editReply({
+			components: [
+				new TextDisplayBuilder().setContent(`📋 ${findings.length} occurrence(s) — ${detectorName}`),
+				selectRow,
+			],
+			flags: MessageFlags.IsComponentsV2,
+		});
+	}
+	// Select menu : choix d'une occurrence spécifique
+	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('trufflehog_select:')) {
+		const [, detectorName, ...rest] = interaction.customId.split(':');
+		const projectKey = rest.join(':');
+		const idx = parseInt(interaction.values[0], 10);
+
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		const finding = interaction.client.projectCache[projectKey]?.trufflehog?.[detectorName]?.[idx];
+		if (!finding) {
+			return interaction.editReply({
+				components: [new TextDisplayBuilder().setContent('❌ Résultat introuvable.')],
+				flags: MessageFlags.IsComponentsV2,
+			});
+		}
+
+		const repoUrl = interaction.client.projectCache[projectKey]?.withBranch;
+		const container = trufflehogReport.showFindingDetail(finding, repoUrl);
+		await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+	}
+
+	// PIPELINE
+	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('pipeline_secrettype:')) {
+		const projectKey = interaction.customId.replace('pipeline_secrettype:', '');
+		const secretType = interaction.values[0];
+
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		const cached = interaction.client.projectCache[projectKey]?.pipeline;
+		if (!cached) {
+			return interaction.editReply({
+				components: [new TextDisplayBuilder().setContent('❌ Résultats expirés, relancez l\'analyse.')],
+				flags: MessageFlags.IsComponentsV2,
+			});
+		}
+
+		const deduplicated = pipelineReport.deduplicateFindings(cached.findings);
+		const findings = deduplicated.filter(f => f.secretType === secretType);
+		interaction.client.projectCache[projectKey].pipeline[secretType] = findings;
+
+		const selectRow = pipelineReport.createFindingsSelectMenu(findings, secretType, projectKey);
+		await interaction.editReply({
+			components: [
+				new TextDisplayBuilder().setContent(`📋 ${findings.length} occurrence(s) — ${secretType}`),
+				selectRow,
+			],
+			flags: MessageFlags.IsComponentsV2,
+		});
+	}
+	// Select menu : choix d'une occurrence
+	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('pipeline_select:')) {
+		const [, secretType, ...rest] = interaction.customId.split(':');
+		const projectKey = rest.join(':');
+		const idx = parseInt(interaction.values[0], 10);
+
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		const finding = interaction.client.projectCache[projectKey]?.pipeline?.[secretType]?.[idx];
+		if (!finding) {
+			return interaction.editReply({
+				components: [new TextDisplayBuilder().setContent('❌ Résultat introuvable.')],
+				flags: MessageFlags.IsComponentsV2,
+			});
+		}
+
+		const container = pipelineReport.showFindingDetail(finding);
+		await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+	}
 });
 
-// Log in to Discord with your client's token
 // Start SonarQube server container (if configured)
 (async () => {
 	console.log('[Setup][KunKun] Starting the bot ...');
@@ -193,9 +351,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 	}
 	catch (err) {
 		console.error('[Sonar][Server] Failed to ensure Sonar server:', err.message || err);
-		// continue without blocking the bot
 	}
-	// Log in to Discord with your client's token
 	await client.login(token);
 })();
 
@@ -228,4 +384,3 @@ const gracefulShutdown = async (signal) => {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGHUP', () => gracefulShutdown('SIGHUP'));
-
