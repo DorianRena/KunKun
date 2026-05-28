@@ -4,7 +4,8 @@ const { scanPipelineLogs } = require('./secret-scanner');
 const { formatPipelineReport } = require('./report-formatter');
 
 module.exports = {
-	async analyse(interaction, volumeId, repoUrl) {
+	async analyse(interaction, volumeId, projectKey) {
+		const repoUrl = interaction.client.projectCache[projectKey].base;
 		await interaction.editReply('Analyse des logs de pipeline en cours...');
 		try {
 			let platform;

@@ -2,44 +2,58 @@ const { sonarAnalyse } = require('../docker/sonar-analyse');
 const sonarApi = require('./sonar-api');
 const { createInteractiveReport } = require('./interactive-report');
 const { generateSonarReport } = require('./sonar-report-generator');
+const { MessageFlags } = require('discord.js');
+const { containerInfoMessage } = require('../discord');
+const { colors } = require('../../config.js');
+
+function containerMessage(message, accentColor = colors.log) {
+	return containerInfoMessage('## 📊 SonarQube', message, accentColor);
+}
 
 module.exports = {
-	async analyse(interaction, volumeId, projectKey, repoUrl, branch = null) {
-		await interaction.editReply('Analyse Sonar en cours...');
+	async analyse(interaction, volumeId, projectKey) {
+		const message = await interaction.fetchReply();
+		const components = message.components;
+
+		await interaction.editReply({
+			content: null,
+			components: [...components, containerMessage('Analyse Sonar en cours...')],
+			flags: MessageFlags.IsComponentsV2,
+		});
 		try {
 			await sonarAnalyse(volumeId, { projectKey, projectName: projectKey });
 			await sonarApi.waitForAnalysisCompletion(projectKey);
 		}
 		catch (sonarErr) {
 			console.error('[Analysis] Sonar failed:', sonarErr.message);
-			await interaction.editReply({ content: '⚠️ Sonar n\'a pas pu s\'exécuter.' });
+			console.error(sonarErr);
+			await interaction.editReply({ components: [...components, containerMessage('⚠️ Sonar n\'a pas pu s\'exécuter.')] });
 			return null;
 		}
 		// Fetch metrics from Sonar API (with retry)
-		await interaction.editReply('Récupération des résultats Sonar...');
+		// await interaction.editReply('Récupération des résultats Sonar...');
 		try {
 			const metrics = await sonarApi.fetchProjectMetricsWithRetry(projectKey, 5, 2000);
 			if (metrics) {
-				const { embed, actionRow } = createInteractiveReport(metrics, projectKey, repoUrl, branch);
-				const message = await interaction.fetchReply();
-				await interaction.editReply({
-					content: '',
-					embeds: [...message.embeds, embed],
-					components: [actionRow],
-				});
+				const container = createInteractiveReport(metrics, projectKey);
+				interaction.client.sonarIssueCache[projectKey] = {};
+				await interaction.editReply({ components: [...components, container] });
 				console.log(`[Analysis] Sonar interactive report generated for project ${projectKey}`);
 				await generateSonarReport(projectKey, volumeId);
 				return metrics;
 			}
 			else {
 				console.error('[Analysis] Failed to fetch metrics');
-				await interaction.editReply('⚠️ Les résultats Sonar n\'ont pas pu être récupérés');
+				await interaction.editReply({ components: [...components, containerMessage('⚠️ Les résultats Sonar n\'ont pas pu être récupérés')] });
+
 				return null;
 			}
 		}
 		catch (apiErr) {
 			console.error('[Analysis] Failed to fetch metrics:', apiErr.message);
-			await interaction.editReply({ content: '⚠️ Les résultats Sonar n\'ont pas pu être récupérés' });
+			console.error(apiErr);
+			await interaction.editReply({ components: [...components, containerMessage('⚠️ Les résultats Sonar n\'ont pas pu être récupérés')] });
+
 		}
 	},
 };

@@ -33,6 +33,9 @@ const sonarApi = {
 			'sqale_rating',
 			'reliability_rating',
 			'security_rating',
+			'lines',
+			'files',
+			'ncloc_language_distribution',
 		];
 
 		const query = `component=${encodeURIComponent(projectKey)}&metricKeys=${metrics.join(',')}`;
