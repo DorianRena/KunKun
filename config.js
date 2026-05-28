@@ -39,4 +39,22 @@ module.exports = {
 	gitlab: {
 		token: process.env.GITLAB_TOKEN || null,
 	},
+	colors: {
+		severity: {
+			BLOCKER: 0xFF0000,
+			CRITICAL: 0xFF4500,
+			MAJOR: 0xFFA500,
+			MINOR: 0xFFD700,
+			INFO: 0x3b6885,
+		},
+		ruleTabs: {
+			root_cause: 0x3b6885,
+			how_to_fix: 0x00FF00,
+		},
+		error: 0xFF0000,
+		info: 0x3b6885,
+		log: 0x858585,
+		warning: 0xFFA500,
+		good: 0x00FF00,
+	},
 };
