@@ -1,4 +1,3 @@
-
 import csv
 import os
 import sys
@@ -104,6 +103,26 @@ def effort_str(minutes):
 def short_component(c):
     parts = c.split(":")
     return parts[-1] if parts else c
+
+def make_file_link(repo_url, file_path, line, platform, display_text, branch="HEAD"):
+    """Retourne du markup ReportLab avec un lien cliquable vers le fichier dans GitLab/GitHub.
+    Si repo_url est absent, retourne le texte sans lien."""
+    if not repo_url or not file_path or file_path == "—":
+        return display_text
+    repo_base = repo_url.rstrip("/").removesuffix(".git")
+    plat = (platform or "").lower()
+    clean_path = file_path.lstrip("/")
+    ref = branch if branch and branch not in ("", "HEAD") else "HEAD"
+    if "gitlab" in plat or "gitlab" in repo_base:
+        url = f"{repo_base}/-/blob/{ref}/{clean_path}"
+        if line and line != "—":
+            url += f"#L{line}"
+    else:
+        # GitHub (défaut)
+        url = f"{repo_base}/blob/{ref}/{clean_path}"
+        if line and line != "—":
+            url += f"#L{line}"
+    return f'<link href="{url}"><u><font color="#005191">{display_text}</font></u></link>'
 
 def parse_sonar_csv(file_path):
     if not os.path.exists(file_path):
@@ -341,15 +360,18 @@ def build_sonar_section(story, metrics, s, usable):
     story.append(Spacer(1, 5 * mm))
 
     # Detailed issues from CSV if available
+    repo_url = metrics.get("info", {}).get("repoUrl") or metrics.get("sonar", {}).get("repoUrl") or ""
+    platform = metrics.get("info", {}).get("platform") or ""
+    branch   = metrics.get("info", {}).get("branch") or "HEAD"
     if csv_file and os.path.exists(csv_file):
         issues = parse_sonar_csv(csv_file)
-        _build_sonar_issues(story, issues, s, usable)
+        _build_sonar_issues(story, issues, s, usable, repo_url=repo_url, platform=platform, branch=branch)
     else:
         story.append(Paragraph(
             f"Fichier CSV d'issues non trouvé : {csv_file}", s["small"]))
     story.append(Spacer(1, 4 * mm))
 
-def _build_sonar_issues(story, issues, s, usable):
+def _build_sonar_issues(story, issues, s, usable, repo_url="", platform="", branch="HEAD"):
     total       = len(issues)
     by_type     = defaultdict(int)
     by_file     = defaultdict(int)
@@ -518,7 +540,9 @@ def _build_sonar_issues(story, issues, s, usable):
             line = int(float(iss.get("line", 0)))
         except Exception:
             line = 0
-        loc     = f"{xml_escape(iss['_file'])} <b>L.{line}</b>"
+        file_path = iss['_file']
+        loc_display = f"{xml_escape(file_path)} <b>L.{line}</b>"
+        loc = make_file_link(repo_url, file_path, line, platform, loc_display, branch=branch)
         raw_msg = xml_escape(iss.get("message", "").strip('"').replace('""', '"'))
         msg     = (raw_msg[:22] + "…") if len(raw_msg) > 22 else raw_msg
         eff     = iss.get("effort", "—")
@@ -553,6 +577,9 @@ def build_semgrep_section(story, metrics, s, usable):
 
     results = semgrep_data.get("results", [])
     version = semgrep_data.get("version", "—")
+    repo_url = metrics.get("info", {}).get("repoUrl") or ""
+    platform = metrics.get("info", {}).get("platform") or ""
+    branch   = metrics.get("info", {}).get("branch") or "HEAD"
 
     for el in section_heading("Semgrep — Analyse SAST", s, level=1, color=SGREP_COLOR):
         story.append(el)
@@ -606,7 +633,8 @@ def build_semgrep_section(story, metrics, s, usable):
     for i, r in enumerate(results, start=1):
         path    = r.get("path", "—").replace("/repo/", "")
         line    = r.get("start", {}).get("line", "—")
-        loc     = f"{path} <b>L.{line}</b>"
+        loc_display = f"{path} <b>L.{line}</b>"
+        loc     = make_file_link(repo_url, path, line, platform, loc_display, branch=branch)
         rule_id = r.get("check_id", "—").split(".")[-1]
         meta    = r.get("extra", {}).get("metadata", {})
         sev     = meta.get("severity", r.get("extra", {}).get("severity", "ERROR")).upper()
@@ -644,6 +672,9 @@ def build_semgrep_section(story, metrics, s, usable):
 def build_trufflehog_section(story, metrics, s, usable):
     TH_COLOR = SECTION_COLORS["trufflehog"]
     findings = metrics["trufflehog"]
+    repo_url = metrics.get("info", {}).get("repoUrl") or ""
+    platform = metrics.get("info", {}).get("platform") or ""
+    branch   = metrics.get("info", {}).get("branch") or "HEAD"
 
     for el in section_heading("TruffleHog — Secrets détectés", s, level=1, color=TH_COLOR):
         story.append(el)
@@ -703,12 +734,14 @@ def build_trufflehog_section(story, metrics, s, usable):
             
         path = fs.get("file", "—").replace("/repo/", "")
         line = str(fs.get("line", "—"))
+        loc_display = f"{path} <b>L.{line}</b>"
+        loc = make_file_link(repo_url, path, line, platform, loc_display, branch=branch)
         
         rows.append([
             Paragraph(display, s["td_mono"]),
             Paragraph(f.get("DetectorName", "—"), s["td"]),
             Paragraph(f.get("DetectorDescription", "—"), s["td"]),
-            Paragraph(f"{path} <b>L.{line}</b>", s["td_mono"]),
+            Paragraph(loc, s["td_mono"]),
         ])
 
     col_ws = [usable * p for p in [0.20, 0.12, 0.38, 0.30]]
@@ -865,7 +898,7 @@ def build_pipeline_section(story, metrics, s, usable):
         Paragraph("Job", s["th_left"]),
         Paragraph("Date / Heure", s["th_left"]),
         Paragraph("Commit", s["th_left"]),
-        Paragraph("Lg", s["th"]),
+        Paragraph("Ligne", s["th"]),
         Paragraph("Type", s["th_left"]),
         Paragraph("Aperçu", s["th_left"]),
     ]]
@@ -948,7 +981,7 @@ def build_pipeline_section(story, metrics, s, usable):
         style_cmds.append(("TEXTCOLOR", (5, i), (5, i), row_color))
         style_cmds.append(("FONTNAME",  (5, i), (5, i), "Helvetica-Bold"))
 
-    col_ws = [usable * p for p in [0.20, 0.10, 0.13, 0.18, 0.05, 0.18, 0.16]]
+    col_ws = [usable * p for p in [0.20, 0.10, 0.13, 0.18, 0.07, 0.18, 0.14]]
     dt = Table(det_rows, colWidths=col_ws, repeatRows=1)
     dt.setStyle(TableStyle(style_cmds))
     story.append(dt)
@@ -1025,7 +1058,7 @@ def build_cover(story, metrics, s, usable, sections_present):
 
     section_labels = {
         "sonar":      ("SonarQube", "Analyse statique du code (qualité, dette technique, issues)", BLUE),
-        "semgrep":    ("Semgrep", "Analyse SAST — vulnerabilités de securité", SECTION_COLORS["semgrep"]),
+        "semgrep":    ("Semgrep", "Analyse SAST : vulnerabilités de securité", SECTION_COLORS["semgrep"]),
         "trufflehog": ("TruffleHog", "Détection de secrets exposés dans les fichiers", SECTION_COLORS["trufflehog"]),
         "pipeline":   ("Pipeline CI", "Secrets detectés dans les logs de CI/CD", SECTION_COLORS["pipeline"]),
     }
@@ -1080,7 +1113,42 @@ def build_pdf(metrics_path, output_pdf):
 
     # Derive project name
     project_name = metrics["info"].get("name")
-    project_name = project_name.replace("-", ":")
+
+    # ── Inférer repoUrl, platform et branch depuis les données disponibles ──────
+    info = metrics.setdefault("info", {})
+    # Priorité 1 : pipeline stats/findings (source la plus fiable pour repoUrl)
+    if not info.get("repoUrl") and "pipeline" in metrics:
+        pl = metrics["pipeline"]
+        stats_pl = pl.get("stats", {})
+        findings_pl = pl.get("findings", [])
+        first_f = findings_pl[0] if findings_pl else {}
+        ru = stats_pl.get("repoUrl") or first_f.get("repoUrl") or ""
+        pf = (stats_pl.get("platform") or first_f.get("platform") or "").lower()
+        if ru:
+            info["repoUrl"] = ru.rstrip("/").removesuffix(".git")
+        if pf:
+            info["platform"] = pf
+    # Priorité 2 : inférer depuis le nom (format "github-owner-repo[-branch]")
+    # Le nom peut contenir la branche : "gitlab-owner-repo-branch"
+    # On ne peut pas distinguer repo de branch via le nom seul => on utilise info["branch"]
+    if not info.get("repoUrl"):
+        raw_name = info.get("name", "")
+        branch_suffix = ("-" + info["branch"]) if info.get("branch") and info["branch"] != "HEAD" else ""
+        # Retirer le suffixe de branche du nom pour isoler platform-owner-repo
+        clean_name = raw_name
+        if branch_suffix and clean_name.endswith(branch_suffix):
+            clean_name = clean_name[:-len(branch_suffix)]
+        parts = clean_name.split("-")
+        if len(parts) >= 3:
+            plat_key = parts[0].lower()
+            owner    = parts[1]
+            repo     = "-".join(parts[2:])
+            if "gitlab" in plat_key:
+                info["repoUrl"]  = f"https://gitlab.com/{owner}/{repo}"
+                info["platform"] = "gitlab"
+            else:
+                info["repoUrl"]  = f"https://github.com/{owner}/{repo}"
+                info["platform"] = "github"
 
     s = make_styles()
     W, H = A4
@@ -1136,12 +1204,31 @@ def build_pdf(metrics_path, output_pdf):
             c.drawImage(logo_path, x_pos, y_pos, width=logo_size, height=logo_size, mask='auto')
             c.restoreState()  
         
-        c.setFont("Helvetica-Bold", 40)
+        c.setFont("Helvetica-Bold", 42)
         c.setFillColor(BLUE)
-        c.drawString(margin + 6 * mm, H - 28 * mm, "Rapport d'Analyse")
-        c.setFont("Helvetica-Bold", 14)
+        c.drawString(margin + 6 * mm, H - 31 * mm, "Rapport d'Analyse")
+        repo_url = metrics.get("info", {}).get("repoUrl") or metrics.get("sonar", {}).get("repoUrl") or ""
+        platform = metrics.get("info", {}).get("platform") or ""
+        repo_base = repo_url.rstrip("/").removesuffix(".git")
+        plat = (platform or "").lower()
+        branch   = metrics.get("info", {}).get("branch")
+        if "gitlab" in plat or "gitlab" in repo_base:
+            url = f"{repo_base}/-/blob/{branch}"
+        else:
+            url = f"{repo_base}/blob/{branch}"
+        name_display = project_name.replace(":", "/")
+
+        c.setFont("Helvetica-Bold", 10)
         c.setFillColor(TEAL)
-        c.drawString(margin + 6 * mm, H - 40 * mm, f"Projet : {project_name}")
+        x_pos = margin + 6 * mm
+        y_pos = H - 43 * mm
+        c.drawString(x_pos, y_pos, f"Lien : {name_display}")
+
+        text_to_measure = f"Lien : {name_display}"
+        text_width = c.stringWidth(text_to_measure, "Helvetica-Bold", 10)
+
+        c.linkURL(url, (x_pos, y_pos, x_pos + text_width, y_pos + 10), relative=1)
+
         c.setFont("Helvetica", 10)
         c.setFillColor(GRAY_DARK)
         outils = " | ".join(k.capitalize() for k in sections_present)

@@ -24,6 +24,7 @@ module.exports = {
 				`-Dsonar.projectKey=${projectKey}`,
 				`-Dsonar.projectName=${projectName}`,
 				'-Dsonar.sources=.',
+				'-Dsonar.exclusions=**/*.java',
 				`-Dsonar.host.url=${sonarHost}`,
 				`-Dsonar.login=${sonarToken}`,
 			],

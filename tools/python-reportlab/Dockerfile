@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-RUN pip install reportlab
+RUN pip install reportlab && pip install tzdata
 
 RUN apt-get update && apt-get install -y locales
 

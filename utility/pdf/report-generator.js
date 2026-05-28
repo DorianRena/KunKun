@@ -17,7 +17,7 @@ module.exports = {
 
 		metrics.info = {};
 		metrics.info.branch = branch || 'HEAD';
-		metrics.info.name = sanitizedProjectKey;
+		metrics.info.name = projectKey;
 
 		const pythonCmd = [
 			'python3', '/src/generate_report.py', JSON.stringify(metrics), `/output/${pdfBasename}`,
