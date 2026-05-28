@@ -19,9 +19,11 @@ module.exports = {
 		});
 		try {
 			const semgrepOutput = await semgrepAnalyse(volumeId, { config: 'p/owasp-top-ten' });
+			console.log('[Analysis] Semgrep analyse successfully');
 			const { results, scannedCount } = parseSemgrepOutput(semgrepOutput);
-			interaction.client.semgrepCache[projectKey] = {};
-			interaction.client.semgrepCache[projectKey].results = results;
+			console.log('[Analysis] Semgrep parse successfully');
+			interaction.client.projectCache[projectKey].semgrep = {};
+			interaction.client.projectCache[projectKey].semgrep.results = results;
 			const container = createInteractiveReport(results, scannedCount, projectKey);
 
 			console.log('[Analysis] Semgrep report generated');

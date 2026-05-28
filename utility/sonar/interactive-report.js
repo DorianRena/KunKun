@@ -6,7 +6,6 @@ const {
 	StringSelectMenuOptionBuilder,
 	ContainerBuilder,
 	SeparatorSpacingSize,
-	MessageFlags,
 } = require('discord.js');
 const TurndownService = require('turndown');
 const { colors } = require('../../config');
@@ -69,14 +68,14 @@ module.exports = {
 			.addTextDisplayComponents(t => t.setContent(`### ${statusEmoji} Quality Gate : ${status}`))
 			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 			.addTextDisplayComponents(t => t.setContent([
-				`🔒 **Vulnérabilités** : ${vulnerabilities}`,
-				`🐛 **Bugs** : ${bugs}`,
-				`💧 **Code Smells** : ${codeSmells}`,
+				`📊 **Couverture** : ${coverage === 'N/A' ? 'N/A' : `${coverage}%`}`,
+				`⚖️ **Duplications** : ${duplications === 'N/A' ? 'N/A' : `${duplications}%`}`,
 			].join('\n')))
 			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
 			.addTextDisplayComponents(t => t.setContent([
-				`📊 **Couverture** : ${coverage === 'N/A' ? 'N/A' : `${coverage}%`}`,
-				`⚖️ **Duplications** : ${duplications === 'N/A' ? 'N/A' : `${duplications}%`}`,
+				`🔒 **Vulnérabilités** : ${vulnerabilities}`,
+				`🐛 **Bugs** : ${bugs}`,
+				`💧 **Code Smells** : ${codeSmells}`,
 			].join('\n')));
 
 		if (vulnerabilities || bugs || codeSmells) {
@@ -99,8 +98,6 @@ module.exports = {
 				);
 			const issueRow = new ActionRowBuilder().addComponents(issueSelect);
 			container
-				.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-				.addTextDisplayComponents(t => t.setContent('### 📌 Explorer les issues'))
 				.addActionRowComponents(issueRow);
 		}
 		return container;
@@ -135,9 +132,9 @@ module.exports = {
 	 * Create a Components V2 message for issue detail.
 	 * @param {object} issue
 	 * @param {string} repoUrl
-	 * @returns {{ container: ContainerBuilder, flags: number }}
+	 * @returns ContainerBuilder
 	 */
-	createIssueDetailEmbed(issue, repoUrl) {
+	showIssueDetail(issue, repoUrl) {
 		const severityColors = colors.severity;
 		const severityEmojis = {
 			BLOCKER: '🔴',
@@ -163,7 +160,7 @@ module.exports = {
 				.setStyle(ButtonStyle.Secondary),
 		);
 
-		const container = new ContainerBuilder()
+		return new ContainerBuilder()
 			.setAccentColor(severityColors[issue.severity] || colors.log)
 			.addTextDisplayComponents(
 				(t) => t.setContent(`## ${severityEmojis[issue.severity]} ${issue.message}`),
@@ -179,15 +176,13 @@ module.exports = {
 			)
 			.addSeparatorComponents((s) => s.setDivider(false).setSpacing(SeparatorSpacingSize.Small))
 			.addActionRowComponents((r) => r.setComponents(...row.components));
-
-		return { container, row, flags: MessageFlags.IsComponentsV2 };
 	},
 
 	/**
 	 * Create a Components V2 message for rule detail.
 	 * @param {object} rule
 	 * @param {string} tab - 'root_cause' | 'how_to_fix'
-	 * @returns {{ container: ContainerBuilder, flags: number }}
+	 * @returns ContainerBuilder
 	 */
 	showRule(rule, tab = 'root_cause') {
 		const sectionKey = tab === 'how_to_fix' ? 'how_to_fix' : 'root_cause';
@@ -214,7 +209,7 @@ module.exports = {
 				.setDisabled(tab === 'how_to_fix'),
 		);
 
-		const container = new ContainerBuilder()
+		return new ContainerBuilder()
 			.setAccentColor(tabColors[tab] ?? colors.info)
 			.addTextDisplayComponents(
 				(t) => t.setContent(`## 📖 ${rule.name}\n*${rule.key}*`),
@@ -233,7 +228,5 @@ module.exports = {
 			)
 			.addSeparatorComponents((s) => s.setDivider(false).setSpacing(SeparatorSpacingSize.Small))
 			.addActionRowComponents((r) => r.setComponents(...tabRow.components));
-
-		return { container, row: tabRow, flags: MessageFlags.IsComponentsV2 };
 	},
 };

@@ -5,7 +5,7 @@ const {
 	StringSelectMenuOptionBuilder,
 	ContainerBuilder,
 	SeparatorSpacingSize,
-	MessageFlags, ButtonBuilder,
+	ButtonBuilder,
 } = require('discord.js');
 const { colors } = require('../../config');
 
@@ -55,24 +55,22 @@ module.exports = {
 				.setPlaceholder('🔍 Choisir une sévérité')
 				.addOptions(
 					new StringSelectMenuOptionBuilder()
-						.setLabel('ERROR')
+						.setLabel('Erreur')
 						.setValue('ERROR')
 						.setEmoji('🔴'),
 
 					new StringSelectMenuOptionBuilder()
-						.setLabel('WARNING')
+						.setLabel('Warning')
 						.setValue('WARNING')
 						.setEmoji('🟠'),
 
 					new StringSelectMenuOptionBuilder()
-						.setLabel('INFO')
+						.setLabel('Info')
 						.setValue('INFO')
 						.setEmoji('🔵'),
 				);
 			const severityRow = new ActionRowBuilder().addComponents(severitySelect);
 			container
-				.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-				.addTextDisplayComponents(t => t.setContent('### 📌 Explorer les problèmes'))
 				.addActionRowComponents(severityRow);
 		}
 		return container;
@@ -91,37 +89,7 @@ module.exports = {
 		return new ActionRowBuilder().addComponents(selectMenu);
 	},
 
-	/*	createFindingDetailEmbed(finding, repoUrl) {
-			const severity = (finding.extra?.severity || 'WARNING').toUpperCase();
-			const filePath = finding.path;
-			const line = finding.start?.line ?? null;
-			const fileUrl = repoUrl ? buildFileUrl(repoUrl, filePath, line) : null;
-			const fileValue = fileUrl ? `[${filePath}:${line ?? '?'}](${fileUrl})` : `${filePath}:${line ?? '?'}`;
-			const message = finding.extra?.message || finding.check_id;
-			const cwe = finding.extra?.metadata?.cwe ? `\n🔗 **CWE** : ${[].concat(finding.extra.metadata.cwe).join(', ')}` : '';
-			const owasp = finding.extra?.metadata?.owasp ? `\n🔗 **OWASP** : ${[].concat(finding.extra.metadata.owasp).join(', ')}` : '';
-			const snippet = finding.extra?.lines?.trim() ? `\n\`\`\`\n${finding.extra.lines.trim().slice(0, 500)}\n\`\`\`` : '';
-
-			const container = new ContainerBuilder()
-				.setAccentColor(SEVERITY_COLORS[severity] ?? colors.log)
-				.addTextDisplayComponents(t => t.setContent([
-					`## ${SEVERITY_EMOJIS[severity] ?? '⚠️'} ${message}`,
-					`📁 **Fichier** : ${fileValue}`, `⚠️ **Sévérité** : ${severity}`,
-					`🏷️ **Règle** : \`${finding.check_id}\`${cwe}${owasp}`,
-				].join('\n')));
-
-			if (snippet) container.addTextDisplayComponents((t) => t.setContent(`**Extrait de code** :${snippet}`));
-
-			const fix = finding.extra?.fix;
-			if (fix) {
-				container
-					.addSeparatorComponents((s) => s.setDivider(false).setSpacing(SeparatorSpacingSize.Small))
-					.addTextDisplayComponents((t) => t.setContent(`**✅ Correction suggérée** :\n\`\`\`\n${fix.slice(0, 500)}\n\`\`\``));
-			}
-
-			return { container, flags: MessageFlags.IsComponentsV2 };
-		},*/
-	createFindingDetailEmbed(finding, repoUrl) {
+	showFindingDetail(finding, repoUrl) {
 		const severity = (finding.extra?.severity || 'WARNING').toUpperCase();
 		const filePath = finding.path.replace(/^\/repo\//, '');
 		const line = finding.start?.line ?? null;
@@ -159,9 +127,9 @@ module.exports = {
 			container
 				.addSeparatorComponents(s => s.setDivider(false).setSpacing(SeparatorSpacingSize.Small))
 				.addTextDisplayComponents(t => t.setContent([
-					likelihood ? `📈 **Probabilité** : ${riskEmojis[likelihood] ?? ''} ${likelihood}` : null,
-					impact ? `💥 **Impact**      : ${riskEmojis[impact] ?? ''} ${impact}` : null,
-					confidence ? `🎯 **Confiance**   : ${riskEmojis[confidence] ?? ''} ${confidence}` : null,
+					likelihood ? `📈 **Probabilité** :  ${riskEmojis[likelihood] ?? ''} ${likelihood}` : null,
+					impact ? `💥 **Impact** :  ${riskEmojis[impact] ?? ''} ${impact}` : null,
+					confidence ? `🎯 **Confiance** :  ${riskEmojis[confidence] ?? ''} ${confidence}` : null,
 				].filter(Boolean).join('\n')));
 		}
 
@@ -213,6 +181,6 @@ module.exports = {
 				.addActionRowComponents(buttons);
 		}
 
-		return { container, flags: MessageFlags.IsComponentsV2 };
+		return container;
 	},
 };

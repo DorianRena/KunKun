@@ -13,9 +13,11 @@ const config = require('./config');
 const { setup, teardown } = require('./utility/docker/utility');
 const { handleModal } = require('./commands/git/modal');
 const sonarApi = require('./utility/sonar/sonar-api');
-const { createIssuesSelectMenu, createIssueDetailEmbed } = require('./utility/sonar/interactive-report');
+const { createIssuesSelectMenu, showIssueDetail } = require('./utility/sonar/interactive-report');
 const { showRule } = require('./utility/sonar/utility');
 const semgrepReport = require('./utility/semgrep/interactive-report');
+const trufflehogReport = require('./utility/trufflehog/interactive-report');
+const pipelineReport = require('./utility/pipeline/interactive-report');
 
 // Validate required configuration at startup
 try {
@@ -31,8 +33,6 @@ const token = config.discord.token;
 // Create a new client instance
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-client.sonarIssueCache = {};
-client.semgrepCache = {};
 client.projectCache = {};
 
 client.once(Events.ClientReady, (readyClient) => {
@@ -90,6 +90,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 		await handleModal(interaction);
 	}
 
+	// SONAR
 	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('sonar_issues:')) {
 		const projectKey = interaction.customId.replace('sonar_issues:', '');
 		const type = interaction.values[0];
@@ -115,7 +116,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 				flags: MessageFlags.IsComponentsV2,
 			});
 		}
-		interaction.client.sonarIssueCache[projectKey][type] = issues;
+		interaction.client.projectCache[projectKey].sonar[type] = issues;
 		const selectMenu = createIssuesSelectMenu(issues, type, projectKey);
 
 		return interaction.editReply({
@@ -146,7 +147,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 				return;
 			}
 
-			const issue = interaction.client.sonarIssueCache?.[projectKey]?.[issueType]?.[issueIndex];
+			const issue = interaction.client.projectCache[projectKey]?.sonar?.[issueType]?.[issueIndex];
 
 			if (!issue) {
 				await interaction.editReply({
@@ -157,8 +158,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			}
 
 			const repoUrl = interaction.client.projectCache[projectKey].withBranch;
-			const { container, flags } = createIssueDetailEmbed(issue, repoUrl);
-			await interaction.editReply({ components: [container], flags });
+			const container = showIssueDetail(issue, repoUrl);
+			await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
 		}
 		catch (err) {
 			console.error('[Sonar] Select menu error:', err.message);
@@ -169,7 +170,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			});
 		}
 	}
-	//
+	// Sonar show rule detail
 	if (interaction.isButton() && interaction.customId.startsWith('sonar_rule:')) {
 		const ruleKey = interaction.customId.split('sonar_rule:')[1];
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -184,20 +185,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 		await showRule(ruleKey, interaction, tab);
 	}
 
-
-	// Bouton de sévérité (ERROR / WARNING / INFO)
-	// if (interaction.isButton() && interaction.customId.startsWith('semgrep:')) {
-	// 	const severity = interaction.customId.split(':')[1];
-	// 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-	// 	const cached = interaction.client.semgrepCache;
-	// 	if (!cached) return interaction.editReply('❌ Résultats expirés, relancez l\'analyse.');
-	// 	const { selectRow, filtered } = semgrepReport.createIssuesSelectMenu(cached.results, severity);
-	// 	interaction.client.semgrepFilteredCache = { ...interaction.client.semgrepFilteredCache, [severity]: filtered };
-	// 	await interaction.editReply({
-	// 		content: `📋 ${filtered.length} résultat(s) — sélectionnez-en un`,
-	// 		components: [selectRow],
-	// 	});
-	// }
+	// SEMGREP
 	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('semgrep_severity:')) {
 		const projectKey = interaction.customId.replace('semgrep_severity:', '');
 		const severity = interaction.values[0];
@@ -206,15 +194,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
 			flags: MessageFlags.Ephemeral,
 		});
 
-		const cached = interaction.client.semgrepCache[projectKey];
+		const results = interaction.client.projectCache[projectKey]?.semgrep?.results;
 
-		if (!cached) {
+		if (!results) {
 			return interaction.editReply({
 				content: '❌ Résultats expirés, relancez l’analyse.',
 			});
 		}
-		const issues = cached.results.filter((r) => (r.extra?.severity || 'WARNING').toUpperCase() === severity);
-		interaction.client.semgrepCache[projectKey][severity] = issues;
+		const issues = results.filter((r) => (r.extra?.severity || 'WARNING').toUpperCase() === severity);
+		interaction.client.projectCache[projectKey].semgrep[severity] = issues;
 		if (!issues.length) {
 			return interaction.editReply({
 				components: [
@@ -242,14 +230,114 @@ client.on(Events.InteractionCreate, async (interaction) => {
 		const idx = parseInt(interaction.values[0], 10);
 
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-		const finding = interaction.client.semgrepCache[projectKey]?.[severity]?.[idx];
+		const finding = interaction.client.projectCache[projectKey]?.semgrep?.[severity]?.[idx];
 		if (!finding) return interaction.editReply('❌ Résultat introuvable.');
 		const repoUrl = interaction.client.projectCache[projectKey].withBranch;
-		const {
-			container,
-			flags,
-		} = semgrepReport.createFindingDetailEmbed(finding, repoUrl);
-		await interaction.editReply({ components: [container], flags });
+		const container = semgrepReport.showFindingDetail(finding, repoUrl);
+		await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+	}
+
+	// TRUFFLEHOG
+	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('trufflehog_detector:')) {
+		const projectKey = interaction.customId.replace('trufflehog_detector:', '');
+		const detectorName = interaction.values[0];
+
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		const cached = interaction.client.projectCache[projectKey].trufflehog;
+		if (!cached) {
+			return interaction.editReply({
+				components: [new TextDisplayBuilder().setContent('❌ Résultats expirés, relancez l\'analyse.')],
+				flags: MessageFlags.IsComponentsV2,
+			});
+		}
+
+		const findings = cached.findings.filter(f => f.DetectorName === detectorName);
+		interaction.client.projectCache[projectKey].trufflehog[detectorName] = findings;
+
+		if (!findings.length) {
+			return interaction.editReply({
+				components: [new TextDisplayBuilder().setContent(`Aucun résultat pour ${detectorName}`)],
+				flags: MessageFlags.IsComponentsV2,
+			});
+		}
+
+		const selectRow = trufflehogReport.createFindingsSelectMenu(findings, detectorName, projectKey);
+		await interaction.editReply({
+			components: [
+				new TextDisplayBuilder().setContent(`📋 ${findings.length} occurrence(s) — ${detectorName}`),
+				selectRow,
+			],
+			flags: MessageFlags.IsComponentsV2,
+		});
+	}
+	// Select menu : choix d'une occurrence spécifique
+	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('trufflehog_select:')) {
+		const [, detectorName, ...rest] = interaction.customId.split(':');
+		const projectKey = rest.join(':');
+		const idx = parseInt(interaction.values[0], 10);
+
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		const finding = interaction.client.projectCache[projectKey]?.trufflehog?.[detectorName]?.[idx];
+		if (!finding) {
+			return interaction.editReply({
+				components: [new TextDisplayBuilder().setContent('❌ Résultat introuvable.')],
+				flags: MessageFlags.IsComponentsV2,
+			});
+		}
+
+		const repoUrl = interaction.client.projectCache[projectKey]?.withBranch;
+		const container = trufflehogReport.showFindingDetail(finding, repoUrl);
+		await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+	}
+
+	// PIPELINE
+	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('pipeline_secrettype:')) {
+		const projectKey = interaction.customId.replace('pipeline_secrettype:', '');
+		const secretType = interaction.values[0];
+
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		const cached = interaction.client.projectCache[projectKey]?.pipeline;
+		if (!cached) {
+			return interaction.editReply({
+				components: [new TextDisplayBuilder().setContent('❌ Résultats expirés, relancez l\'analyse.')],
+				flags: MessageFlags.IsComponentsV2,
+			});
+		}
+
+		const deduplicated = pipelineReport.deduplicateFindings(cached.findings);
+		const findings = deduplicated.filter(f => f.secretType === secretType);
+		interaction.client.projectCache[projectKey].pipeline[secretType] = findings;
+
+		const selectRow = pipelineReport.createFindingsSelectMenu(findings, secretType, projectKey);
+		await interaction.editReply({
+			components: [
+				new TextDisplayBuilder().setContent(`📋 ${findings.length} occurrence(s) — ${secretType}`),
+				selectRow,
+			],
+			flags: MessageFlags.IsComponentsV2,
+		});
+	}
+	// Select menu : choix d'une occurrence
+	if (interaction.isStringSelectMenu() && interaction.customId.startsWith('pipeline_select:')) {
+		const [, secretType, ...rest] = interaction.customId.split(':');
+		const projectKey = rest.join(':');
+		const idx = parseInt(interaction.values[0], 10);
+
+		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		const finding = interaction.client.projectCache[projectKey]?.pipeline?.[secretType]?.[idx];
+		if (!finding) {
+			return interaction.editReply({
+				components: [new TextDisplayBuilder().setContent('❌ Résultat introuvable.')],
+				flags: MessageFlags.IsComponentsV2,
+			});
+		}
+
+		const container = pipelineReport.showFindingDetail(finding);
+		await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
 	}
 });
 

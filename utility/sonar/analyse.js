@@ -23,6 +23,7 @@ module.exports = {
 		try {
 			await sonarAnalyse(volumeId, { projectKey, projectName: projectKey });
 			await sonarApi.waitForAnalysisCompletion(projectKey);
+			console.log('[Analysis] Sonar analyse successfully');
 		}
 		catch (sonarErr) {
 			console.error('[Analysis] Sonar failed:', sonarErr.message);
@@ -31,12 +32,12 @@ module.exports = {
 			return null;
 		}
 		// Fetch metrics from Sonar API (with retry)
-		// await interaction.editReply('Récupération des résultats Sonar...');
 		try {
 			const metrics = await sonarApi.fetchProjectMetricsWithRetry(projectKey, 5, 2000);
+			console.log('[Analysis] Sonar metrics fetched successfully');
 			if (metrics) {
 				const container = createInteractiveReport(metrics, projectKey);
-				interaction.client.sonarIssueCache[projectKey] = {};
+				interaction.client.projectCache[projectKey].sonar = {};
 				await interaction.editReply({ components: [...components, container] });
 				console.log(`[Analysis] Sonar interactive report generated for project ${projectKey}`);
 				await generateSonarReport(projectKey, volumeId);
