@@ -70,9 +70,7 @@ module.exports = {
 			.addTextDisplayComponents(t => t.setContent([
 				`📊 **Couverture** : ${coverage === 'N/A' ? 'N/A' : `${coverage}%`}`,
 				`⚖️ **Duplications** : ${duplications === 'N/A' ? 'N/A' : `${duplications}%`}`,
-			].join('\n')))
-			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(t => t.setContent([
+				'======',
 				`🔒 **Vulnérabilités** : ${vulnerabilities}`,
 				`🐛 **Bugs** : ${bugs}`,
 				`💧 **Code Smells** : ${codeSmells}`,

@@ -2,6 +2,7 @@ const Docker = require('dockerode');
 const { uniqueId } = require('../id-generator');
 const config = require('../../config');
 const { devNull, stderrStream } = require('./utility');
+const { PassThrough } = require('node:stream');
 
 const docker = new Docker();
 
@@ -28,7 +29,7 @@ module.exports = {
 				`-Dsonar.host.url=${sonarHost}`,
 				`-Dsonar.login=${sonarToken}`,
 			],
-			[devNull(), stderrStream()],
+			[devNull(), process.stderr ? new PassThrough() : devNull()],
 			{
 				HostConfig: {
 					Binds: [`${volumeId}:/repo`],

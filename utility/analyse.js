@@ -67,19 +67,25 @@ module.exports = {
 			interaction.client.projectCache[projectKey] = { base: repoUrl, withBranch: repoUrlBranch };
 
 			// Lancement des analyses
-			if (analyses.sonar) await sonar.analyse(interaction, volumeId, projectKey, repoUrl, branch);
-			if (analyses.semgrep) await semgrep.analyse(interaction, volumeId, projectKey);
-			if (analyses.trufflehog) await trufflehog.analyse(interaction, volumeId, projectKey);
-			if (analyses.pipeline) await pipeline.analyse(interaction, volumeId, projectKey);
+			const metrics = {};
+			if (analyses.sonar) {
+				metrics.sonar = await sonar.analyse(interaction, volumeId, projectKey, repoUrl, branch);
+			}
+			if (analyses.semgrep) {
+				metrics.semgrep = await semgrep.analyse(interaction, volumeId, projectKey);
+			}
+			if (analyses.trufflehog) {
+				metrics.trufflehog = await trufflehog.analyse(interaction, volumeId, projectKey);
+			}
+			if (analyses.pipeline) {
+				metrics.pipeline = await pipeline.analyse(interaction, volumeId, projectKey);
+			}
 
 			// Génération du rapport PDF
-/*
-			await interaction.editReply({ content: 'Génération du rapport PDF...', components: [] });
 			const report = await generateReport(projectKey, volumeId, metrics, branch);
 			const message = await interaction.fetchReply();
-			const existingEmbeds = message.embeds;
-			await sendWithPdfButton(interaction, report, existingEmbeds);
-*/
+			const components = message.components;
+			await sendWithPdfButton(interaction, report, components);
 
 		}
 		catch (err) {

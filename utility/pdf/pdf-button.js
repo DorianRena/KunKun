@@ -85,15 +85,16 @@ const removeVolume = async (volumeName) => {
  *
  * @param {import('discord.js').ChatInputCommandInteraction} interaction
  * @param {{ volumeName: string, filename: string }} report
- * @param {import('discord.js').EmbedBuilder[]} embeds
+ * @param components
  */
-async function sendWithPdfButton(interaction, report, container) {
+async function sendWithPdfButton(interaction, report, components) {
 	const button = new ButtonBuilder()
 		.setCustomId('download_pdf_report')
 		.setLabel('📄 Télécharger le rapport PDF')
 		.setStyle(ButtonStyle.Primary);
+	const buttonRow = new ActionRowBuilder().addComponents(button);
 
-	await interaction.editReply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+	await interaction.editReply({ components: [...components, buttonRow] });
 
 	const message = await interaction.fetchReply();
 
