@@ -1,7 +1,7 @@
 const Docker = require('dockerode');
 const { uniqueId } = require('../id-generator');
 const config = require('../../config');
-const { devNull, stderrStream } = require('./utility');
+const { devNull } = require('./utility');
 const { PassThrough } = require('node:stream');
 
 const docker = new Docker();

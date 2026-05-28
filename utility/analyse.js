@@ -80,9 +80,13 @@ module.exports = {
 			if (analyses.pipeline) {
 				metrics.pipeline = await pipeline.analyse(interaction, volumeId, projectKey);
 			}
+			metrics.info = {};
+			metrics.info.repoUrl = repoUrl;
+			metrics.info.branch = branch || 'HEAD';
+			metrics.info.name = projectKey;
 
 			// Génération du rapport PDF
-			const report = await generateReport(projectKey, volumeId, metrics, branch);
+			const report = await generateReport(projectKey, volumeId, metrics);
 			const message = await interaction.fetchReply();
 			const components = message.components;
 			await sendWithPdfButton(interaction, report, components);

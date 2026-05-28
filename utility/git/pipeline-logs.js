@@ -41,9 +41,10 @@ async function handleGithub(repoUrl, token, limit) {
 	const runs = await Promise.all(
 		runsData.workflow_runs.slice(0, limit).map(async (run) => {
 			const jobsData = await fetchGithub(`${base}/actions/runs/${run.id}/jobs`, token);
+			const jobsList = jobsData && jobsData.jobs ? jobsData.jobs : [];
 
 			const jobs = await Promise.all(
-				jobsData.jobs.map(async (job) => {
+				jobsList.map(async (job) => {
 					const logs = await fetchGithub(`${base}/actions/jobs/${job.id}/logs`, token);
 					return {
 						id:          job.id,

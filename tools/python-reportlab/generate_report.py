@@ -77,14 +77,25 @@ SECTION_COLORS = {
 def parse_effort(e):
     if not e or e.strip() in ("0min", ""):
         return 0
-    e = e.strip()
+    e = e.strip().lower() # Ensure lowercase for consistency
     total = 0
+    
+    # Handle days (1 day = 8 hours = 480 minutes based on your effort_str logic)
+    if "d" in e:
+        parts = e.split("d")
+        total += int(parts[0]) * 8 * 60
+        e = parts[1]
+        
+    # Handle hours
     if "h" in e:
         parts = e.split("h")
         total += int(parts[0]) * 60
         e = parts[1]
+        
+    # Handle minutes
     if "min" in e:
         total += int(e.replace("min", ""))
+        
     return total
 
 def effort_str(minutes):
@@ -461,8 +472,7 @@ def _build_sonar_issues(story, issues, s, usable, repo_url="", platform="", bran
     ftable = Table(file_rows, colWidths=[usable * 0.52, usable * 0.1, usable * 0.38])
     ftable.setStyle(TABLE_BASE)
     story.append(ftable)
-    story.append(Spacer(1, 4 * mm))
-    story.append(PageBreak())
+    story.append(Spacer(1, 15 * mm))
 
     # Grouped issues list
     for el in section_heading("Liste des issues par règles", s, level=2, color=BLUE):
@@ -481,9 +491,13 @@ def _build_sonar_issues(story, issues, s, usable, repo_url="", platform="", bran
         rule_summary[key]["count"] += 1
         rule_summary[key]["effort"] += iss["_effort_min"]
 
-    sev_sort = {"CRITICAL": 0, "BLOCKER": 1, "MAJOR": 2, "MINOR": 3, "INFO": 4}
+    type_priority = {"VULN": 0, "BUG": 1, "CODE_SMELL": 2}
+    sev_sort = {"BLOCKER": 0, "CRITICAL": 1, "MAJOR": 2, "MINOR": 3, "INFO": 4}
     sorted_rules = sorted(rule_summary.items(),
-        key=lambda x: (sev_sort.get(x[0][3], 5), x[0][2], x[0][1]))
+        key=lambda x: (
+            type_priority.get(x[0][2], 3), 
+            sev_sort.get(x[0][3], 5)
+        ))
 
     list_rows = [[
         Paragraph("Criticité", s["th"]),
@@ -528,8 +542,12 @@ def _build_sonar_issues(story, issues, s, usable, repo_url="", platform="", bran
         Paragraph("Fichier / Ligne", s["th_left"]),
         Paragraph("Effort",          s["th"]),
     ]]
+    type_priority = {"VULNERABILITY": 0, "BUG": 1, "CODE_SMELL": 2}
     sorted_issues = sorted(issues,
-        key=lambda x: (sev_sort.get(x["severity"], 5), x["_file"]))
+        key=lambda x: (
+            type_priority.get(x.get("type", ""), 3),
+            sev_sort.get(x.get("severity", ""), 5)
+        ))
     det_style_cmds = list(TABLE_BASE._cmds)
 
     for i, iss in enumerate(sorted_issues, start=1):
@@ -619,6 +637,11 @@ def build_semgrep_section(story, metrics, s, usable):
     for el in section_heading("Vulnérabilités détectées", s, level=2, color=SGREP_COLOR):
         story.append(el)
 
+    sev_priority = {"ERROR": 0, "WARNING": 1}
+    sorted_semgrep = sorted(results, 
+        key=lambda x: sev_priority.get(x.get("extra", {}).get("severity", "WARNING"), 2)
+    )
+
     tbase = table_base(SGREP_COLOR)
     rows = [[
         Paragraph("Sévérité", s["th"]),
@@ -630,7 +653,7 @@ def build_semgrep_section(story, metrics, s, usable):
     ]]
     
     style_cmds = list(tbase._cmds)
-    for i, r in enumerate(results, start=1):
+    for i, r in enumerate(sorted_semgrep, start=1):
         path    = r.get("path", "—").replace("/repo/", "")
         line    = r.get("start", {}).get("line", "—")
         loc_display = f"{path} <b>L.{line}</b>"
@@ -1139,6 +1162,7 @@ def build_pdf(metrics_path, output_pdf):
         if branch_suffix and clean_name.endswith(branch_suffix):
             clean_name = clean_name[:-len(branch_suffix)]
         parts = clean_name.split("-")
+        print(f"[DEBUG] raw_name={info.get('name')!r}, clean_name={clean_name!r}, parts={parts}, repoUrl={info.get('repoUrl')!r}")
         if len(parts) >= 3:
             plat_key = parts[0].lower()
             owner    = parts[1]
