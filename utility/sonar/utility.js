@@ -15,6 +15,7 @@ const utils = {
 		}
 		catch (err) {
 			console.error('[Sonar] Rule tab error:', err.message);
+			console.error(err);
 			await interaction.editReply({ content: `❌ Erreur: ${err.message}`, embeds: [], components: [] });
 		}
 	},

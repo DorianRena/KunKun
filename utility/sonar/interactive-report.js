@@ -15,6 +15,10 @@ turndownService.addRule('code', {
 	filter: 'pre',
 	replacement: (content, node) => `\`\`\`\n${node.textContent}\n\`\`\``,
 });
+turndownService.addRule('h4', {
+	filter: 'h4',
+	replacement: (content) => `**${content}**`,
+});
 
 const tabColors = colors.ruleTabs;
 
@@ -22,6 +26,29 @@ function buildFileUrl(repoUrl, component, line) {
 	const filePath = component.split(':').at(-1);
 	const base = repoUrl.replace(/\/tree\//, '/blob/');
 	return `${base}/${filePath}${line ? `#L${line}` : ''}`;
+}
+
+function escapeRegExp(str) {
+	return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function extractH3BlockAndRemove(html, title) {
+	const regex = new RegExp(
+		`<h3>\\s*${escapeRegExp(title)}\\s*<\\/h3>([\\s\\S]*?)(?=<h3>|$)`,
+		'i',
+	);
+
+	const match = html.match(regex);
+
+	if (!match) {
+		return { content: '', cleaned: html };
+	}
+
+	const content = match[1].trim();
+
+	const cleaned = html.replace(match[0], '').trim();
+
+	return { content, cleaned };
 }
 
 module.exports = {
@@ -184,35 +211,83 @@ module.exports = {
 	/**
 	 * Create a Components V2 message for rule detail.
 	 * @param {object} rule
-	 * @param {string} tab - 'root_cause' | 'how_to_fix'
+	 * @param {string} tab - 'root_cause' | 'how_to_fix' | 'resources'
 	 * @returns ContainerBuilder
 	 */
 	showRule(rule, tab = 'root_cause') {
-		const sectionKey = tab === 'how_to_fix' ? 'how_to_fix' : 'root_cause';
+		let rootCause = rule.descriptionSections.find(s => s.key === 'root_cause')?.content ?? '';
 
-		const descriptionHTML = rule.descriptionSections.find(s => s.key === sectionKey)?.content ?? '';
+		let howToFix = rule.descriptionSections.find(s => s.key === 'how_to_fix')?.content;
+		if (!howToFix) {
+			const res = extractH3BlockAndRemove(rootCause, 'How to fix?');
+			howToFix = res.content;
+			rootCause = res.cleaned;
+		}
+
+		let resources = rule.descriptionSections.find(s => s.key === 'resources')?.content;
+		if (!resources) {
+			const res = extractH3BlockAndRemove(rootCause, 'Documentation');
+			resources = res.content;
+			rootCause = res.cleaned;
+		}
+
+		let descriptionHTML;
+
+		switch (tab) {
+		case 'how_to_fix':
+			descriptionHTML = howToFix;
+			break;
+
+		case 'resources':
+			descriptionHTML = resources;
+			break;
+
+		case 'root_cause':
+		default:
+			descriptionHTML = rootCause;
+			break;
+		}
 		// Limite à 3800 pour laisser de la marge au reste du texte dans le container (max 4000)
-		const description = turndownService.turndown(descriptionHTML).slice(0, 3800) || 'Pas de description disponible';
+		const description = turndownService.turndown(descriptionHTML).slice(0, 3800);
 
+		const hasFix = !!howToFix?.trim();
+		const hasResources = !!resources?.trim();
 		const tabLabels = {
-			root_cause: '❓ Pourquoi c\'est un problème',
-			how_to_fix: '🔧 Comment le corriger',
+			root_cause: '❓ Why is this an issue',
+			how_to_fix: '🔧 How to fix',
+			resources: '🔗 Resources',
 		};
 
-		const tabRow = new ActionRowBuilder().addComponents(
-			new ButtonBuilder()
-				.setCustomId(`sonar_rule_tab:root_cause:${rule.key}`)
-				.setLabel('❓ Pourquoi')
-				.setStyle(tab === 'root_cause' ? ButtonStyle.Primary : ButtonStyle.Secondary)
-				.setDisabled(tab === 'root_cause'),
-			new ButtonBuilder()
-				.setCustomId(`sonar_rule_tab:how_to_fix:${rule.key}`)
-				.setLabel('🔧 Comment corriger')
-				.setStyle(tab === 'how_to_fix' ? ButtonStyle.Primary : ButtonStyle.Secondary)
-				.setDisabled(tab === 'how_to_fix'),
-		);
+		let tabRow;
+		if (hasFix || hasResources) {
+			tabRow = new ActionRowBuilder().addComponents(
+				new ButtonBuilder()
+					.setCustomId(`sonar_rule_tab:root_cause:${rule.key}`)
+					.setLabel('❓ Pourquoi')
+					.setStyle(tab === 'root_cause' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+					.setDisabled(tab === 'root_cause'),
+			);
+			if (hasFix) {
+				tabRow.addComponents(
+					new ButtonBuilder()
+						.setCustomId(`sonar_rule_tab:how_to_fix:${rule.key}`)
+						.setLabel('🔧 Comment corriger')
+						.setStyle(tab === 'how_to_fix' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+						.setDisabled(tab === 'how_to_fix'),
+				);
+			}
+			if (hasResources) {
+				tabRow.addComponents(
+					new ButtonBuilder()
+						.setCustomId(`sonar_rule_tab:resources:${rule.key}`)
+						.setLabel('🔗 Ressources')
+						.setStyle(tab === 'resources' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+						.setDisabled(tab === 'resources'),
+				);
+			}
+		}
 
-		return new ContainerBuilder()
+		const container = new ContainerBuilder()
 			.setAccentColor(tabColors[tab] ?? colors.info)
 			.addTextDisplayComponents(
 				(t) => t.setContent(`## 📖 ${rule.name}\n*${rule.key}*`),
@@ -228,8 +303,12 @@ module.exports = {
 			.addTextDisplayComponents(
 				(t) => t.setContent(`**${tabLabels[tab]}**`),
 				(t) => t.setContent(description),
-			)
-			.addSeparatorComponents((s) => s.setDivider(false).setSpacing(SeparatorSpacingSize.Small))
-			.addActionRowComponents((r) => r.setComponents(...tabRow.components));
+			);
+		if (hasFix || hasResources) {
+			container
+				.addSeparatorComponents((s) => s.setDivider(false).setSpacing(SeparatorSpacingSize.Small))
+				.addActionRowComponents((r) => r.setComponents(...tabRow.components));
+		}
+		return container;
 	},
 };
