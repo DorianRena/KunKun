@@ -5,7 +5,7 @@ const {
 	StringSelectMenuOptionBuilder,
 	ContainerBuilder,
 	SeparatorSpacingSize,
-	MessageFlags,
+	MessageFlags, ButtonBuilder,
 } = require('discord.js');
 const { colors } = require('../../config');
 
@@ -39,29 +39,15 @@ module.exports = {
 
 		const container = new ContainerBuilder()
 			.setAccentColor(accentColor)
-			.addTextDisplayComponents(
-				t => t.setContent('## 🔍 Rapport Semgrep'),
-				t => t.setContent(`${scannedCount} fichier(s) analysé(s)`))
+			.addTextDisplayComponents(t => t.setContent(`## 🔍 Rapport Semgrep\n${scannedCount} fichier(s) analysé(s)`))
 			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(
-				t => t.setContent(`### ${statusEmoji} ${total} problème(s) détecté(s)`),
-			)
+			.addTextDisplayComponents(t => t.setContent(`### ${statusEmoji} ${total} problème(s) détecté(s)`))
 			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addSectionComponents((section) =>
-				section
-					.addTextDisplayComponents((t) => t.setContent(`🔴 **Erreurs** : ${counts.ERROR}`))
-					.setButtonAccessory((b) => b.setCustomId('semgrep:ERROR').setLabel('Voir').setStyle(ButtonStyle.Danger).setDisabled(counts.ERROR === 0)),
-			)
-			.addSectionComponents((section) =>
-				section
-					.addTextDisplayComponents((t) => t.setContent(`🟠 **Warnings** : ${counts.WARNING}`))
-					.setButtonAccessory((b) => b.setCustomId('semgrep:WARNING').setLabel('Voir').setStyle(ButtonStyle.Primary).setDisabled(counts.WARNING === 0)),
-			)
-			.addSectionComponents((section) =>
-				section
-					.addTextDisplayComponents((t) => t.setContent(`🔵 **Infos** : ${counts.INFO}`))
-					.setButtonAccessory((b) => b.setCustomId('semgrep:INFO').setLabel('Voir').setStyle(ButtonStyle.Secondary).setDisabled(counts.INFO === 0)),
-			);
+			.addTextDisplayComponents((t) => t.setContent([
+				`🔴 **Erreurs** : ${counts.ERROR}`,
+				`🟠 **Warnings** : ${counts.WARNING}`,
+				`🔵 **Infos** : ${counts.INFO}`,
+			].join('\n')));
 
 		if (counts.ERROR || counts.WARNING || counts.INFO) {
 			const severitySelect = new StringSelectMenuBuilder()
@@ -105,31 +91,126 @@ module.exports = {
 		return new ActionRowBuilder().addComponents(selectMenu);
 	},
 
+	/*	createFindingDetailEmbed(finding, repoUrl) {
+			const severity = (finding.extra?.severity || 'WARNING').toUpperCase();
+			const filePath = finding.path;
+			const line = finding.start?.line ?? null;
+			const fileUrl = repoUrl ? buildFileUrl(repoUrl, filePath, line) : null;
+			const fileValue = fileUrl ? `[${filePath}:${line ?? '?'}](${fileUrl})` : `${filePath}:${line ?? '?'}`;
+			const message = finding.extra?.message || finding.check_id;
+			const cwe = finding.extra?.metadata?.cwe ? `\n🔗 **CWE** : ${[].concat(finding.extra.metadata.cwe).join(', ')}` : '';
+			const owasp = finding.extra?.metadata?.owasp ? `\n🔗 **OWASP** : ${[].concat(finding.extra.metadata.owasp).join(', ')}` : '';
+			const snippet = finding.extra?.lines?.trim() ? `\n\`\`\`\n${finding.extra.lines.trim().slice(0, 500)}\n\`\`\`` : '';
+
+			const container = new ContainerBuilder()
+				.setAccentColor(SEVERITY_COLORS[severity] ?? colors.log)
+				.addTextDisplayComponents(t => t.setContent([
+					`## ${SEVERITY_EMOJIS[severity] ?? '⚠️'} ${message}`,
+					`📁 **Fichier** : ${fileValue}`, `⚠️ **Sévérité** : ${severity}`,
+					`🏷️ **Règle** : \`${finding.check_id}\`${cwe}${owasp}`,
+				].join('\n')));
+
+			if (snippet) container.addTextDisplayComponents((t) => t.setContent(`**Extrait de code** :${snippet}`));
+
+			const fix = finding.extra?.fix;
+			if (fix) {
+				container
+					.addSeparatorComponents((s) => s.setDivider(false).setSpacing(SeparatorSpacingSize.Small))
+					.addTextDisplayComponents((t) => t.setContent(`**✅ Correction suggérée** :\n\`\`\`\n${fix.slice(0, 500)}\n\`\`\``));
+			}
+
+			return { container, flags: MessageFlags.IsComponentsV2 };
+		},*/
 	createFindingDetailEmbed(finding, repoUrl) {
 		const severity = (finding.extra?.severity || 'WARNING').toUpperCase();
-		const filePath = finding.path;
+		const filePath = finding.path.replace(/^\/repo\//, '');
 		const line = finding.start?.line ?? null;
 		const fileUrl = repoUrl ? buildFileUrl(repoUrl, filePath, line) : null;
 		const fileValue = fileUrl ? `[${filePath}:${line ?? '?'}](${fileUrl})` : `${filePath}:${line ?? '?'}`;
-		const message = finding.extra?.message || finding.check_id;
-		const cwe = finding.extra?.metadata?.cwe ? `\n🔗 **CWE** : ${[].concat(finding.extra.metadata.cwe).join(', ')}` : '';
-		const owasp = finding.extra?.metadata?.owasp ? `\n🔗 **OWASP** : ${[].concat(finding.extra.metadata.owasp).join(', ')}` : '';
-		const snippet = finding.extra?.lines?.trim() ? `\n\`\`\`\n${finding.extra.lines.trim().slice(0, 500)}\n\`\`\`` : '';
 
+		const message = finding.extra?.message || finding.check_id;
+		const cweList = finding.extra?.metadata?.cwe ? [].concat(finding.extra.metadata.cwe) : [];
+		const owaspList = finding.extra?.metadata?.owasp ? [].concat(finding.extra.metadata.owasp) : [];
+		const references = finding.extra?.metadata?.references || [];
+		const likelihood = finding.extra?.metadata?.likelihood;
+		const impact = finding.extra?.metadata?.impact;
+		const confidence = finding.extra?.metadata?.confidence;
+		const fix = finding.extra?.fix;
+		const shortlink = finding.extra?.metadata?.shortlink;
+
+		// Ligne 1 : header
 		const container = new ContainerBuilder()
 			.setAccentColor(SEVERITY_COLORS[severity] ?? colors.log)
-			.addTextDisplayComponents(
-				(t) => t.setContent(`## ${SEVERITY_EMOJIS[severity] ?? '⚠️'} ${message}`),
-				(t) => t.setContent([`📁 **Fichier** : ${fileValue}`, `⚠️ **Sévérité** : ${severity}`, `🏷️ **Règle** : \`${finding.check_id}\`${cwe}${owasp}`].join('\n')),
-			);
+			.addTextDisplayComponents(t =>
+				t.setContent(`## ${SEVERITY_EMOJIS[severity] ?? '⚠️'} ${finding.check_id.split('.').pop()}`),
+			)
+			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small));
 
-		if (snippet) container.addTextDisplayComponents((t) => t.setContent(`**Extrait de code** :${snippet}`));
+		// Localisation + sévérité
+		container.addTextDisplayComponents(t => t.setContent([
+			`📁 **Fichier** : ${fileValue}`,
+			`⚠️ **Sévérité** : ${severity}`,
+			`🏷️ **Règle** : \`${finding.check_id}\``,
+		].join('\n')));
 
-		const fix = finding.extra?.fix;
+		// Risque : likelihood / impact / confidence
+		if (likelihood || impact || confidence) {
+			const riskEmojis = { HIGH: '🔴', MEDIUM: '🟠', LOW: '🟡' };
+			container
+				.addSeparatorComponents(s => s.setDivider(false).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(t => t.setContent([
+					likelihood ? `📈 **Probabilité** : ${riskEmojis[likelihood] ?? ''} ${likelihood}` : null,
+					impact ? `💥 **Impact**      : ${riskEmojis[impact] ?? ''} ${impact}` : null,
+					confidence ? `🎯 **Confiance**   : ${riskEmojis[confidence] ?? ''} ${confidence}` : null,
+				].filter(Boolean).join('\n')));
+		}
+
+		// Description du problème (message tronqué proprement)
+		container
+			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(t => t.setContent(`### 📋 Description\n${message.slice(0, 1000)}`));
+
+		// Correction suggérée
 		if (fix) {
 			container
-				.addSeparatorComponents((s) => s.setDivider(false).setSpacing(SeparatorSpacingSize.Small))
-				.addTextDisplayComponents((t) => t.setContent(`**✅ Correction suggérée** :\n\`\`\`\n${fix.slice(0, 500)}\n\`\`\``));
+				.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(t =>
+					t.setContent(`### ✅ Correction suggérée\n\`\`\`\n${fix.slice(0, 500)}\n\`\`\``),
+				);
+		}
+
+		// CWE / OWASP
+		if (cweList.length || owaspList.length) {
+			container
+				.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+				.addTextDisplayComponents(t => t.setContent([
+					cweList.length ? `🔗 **CWE** : ${cweList.join(', ')}` : null,
+					owaspList.length ? `🛡️ **OWASP** : ${owaspList.join(', ')}` : null,
+				].filter(Boolean).join('\n')));
+		}
+
+		// Bouton vers la règle Semgrep
+		if (shortlink || references.length) {
+			const buttons = new ActionRowBuilder();
+			if (shortlink) {
+				buttons.addComponents(
+					new ButtonBuilder()
+						.setLabel('📖 Voir la règle')
+						.setStyle(ButtonStyle.Link)
+						.setURL(shortlink),
+				);
+			}
+			if (references[0]) {
+				buttons.addComponents(
+					new ButtonBuilder()
+						.setLabel('📚 Documentation')
+						.setStyle(ButtonStyle.Link)
+						.setURL(references[0]),
+				);
+			}
+			container
+				.addSeparatorComponents(s => s.setDivider(false).setSpacing(SeparatorSpacingSize.Small))
+				.addActionRowComponents(buttons);
 		}
 
 		return { container, flags: MessageFlags.IsComponentsV2 };

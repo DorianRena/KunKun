@@ -17,10 +17,7 @@ turndownService.addRule('code', {
 	replacement: (content, node) => `\`\`\`\n${node.textContent}\n\`\`\``,
 });
 
-const tabColors = {
-	root_cause: colors.info,
-	how_to_fix: colors.good,
-};
+const tabColors = colors.ruleTabs;
 
 function buildFileUrl(repoUrl, component, line) {
 	const filePath = component.split(':').at(-1);
@@ -51,32 +48,36 @@ module.exports = {
 		const statusEmoji = status === 'OK' ? '🟢' : status === 'WARN' ? '🟡' : '🔴';
 		const accentColor = status === 'OK' ? colors.good : status === 'WARN' ? colors.warning : colors.error;
 
+		const languagesText = linesDistribution
+			.map((language) => {
+				const percentLine = Math.floor(language[1] / lines * 100);
+
+				return `${language[0]}: ${language[1]} ligne(s), ${percentLine}% des lignes`;
+			})
+			.join('\n');
+
 		const container = new ContainerBuilder()
 			.setAccentColor(accentColor)
-			.addTextDisplayComponents(t => t.setContent('## 📊 Rapport SonarQube'),
-				t => t.setContent(`${files} fichier(s) analysé(s)`),
-				t => t.setContent(`${lines} ligne(s) analysé(s)`))
-			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small));
-		for (const language of linesDistribution) {
-			const percentLine = Math.floor(language[1] / lines * 100);
-			container.addTextDisplayComponents(t => t.setContent(`${language[0]}: ${language[1]} ligne(s), ${percentLine}% des lignes`));
-		}
-		container
+			.addTextDisplayComponents(t => t.setContent([
+				'## 📊 Rapport SonarQube',
+				`${files} fichier(s) analysé(s)`,
+				`${lines} ligne(s) analysé(s)`,
+			].join('\n')))
 			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(
-				t => t.setContent(`### ${statusEmoji} Quality Gate : ${status}`),
-			)
+			.addTextDisplayComponents(t => t.setContent(languagesText))
 			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(
-				t => t.setContent(`🔒 **Vulnérabilités** : ${vulnerabilities}`),
-				t => t.setContent(`🐛 **Bugs** : ${bugs}`),
-				t => t.setContent(`💧 **Code Smells** : ${codeSmells}`),
-			)
+			.addTextDisplayComponents(t => t.setContent(`### ${statusEmoji} Quality Gate : ${status}`))
 			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
-			.addTextDisplayComponents(
-				t => t.setContent(`📊 **Couverture** : ${coverage === 'N/A' ? 'N/A' : `${coverage}%`}`),
-				t => t.setContent(`⚖️ **Duplications** : ${duplications === 'N/A' ? 'N/A' : `${duplications}%`}`),
-			);
+			.addTextDisplayComponents(t => t.setContent([
+				`🔒 **Vulnérabilités** : ${vulnerabilities}`,
+				`🐛 **Bugs** : ${bugs}`,
+				`💧 **Code Smells** : ${codeSmells}`,
+			].join('\n')))
+			.addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+			.addTextDisplayComponents(t => t.setContent([
+				`📊 **Couverture** : ${coverage === 'N/A' ? 'N/A' : `${coverage}%`}`,
+				`⚖️ **Duplications** : ${duplications === 'N/A' ? 'N/A' : `${duplications}%`}`,
+			].join('\n')));
 
 		if (vulnerabilities || bugs || codeSmells) {
 			const issueSelect = new StringSelectMenuBuilder()
@@ -188,7 +189,7 @@ module.exports = {
 	 * @param {string} tab - 'root_cause' | 'how_to_fix'
 	 * @returns {{ container: ContainerBuilder, flags: number }}
 	 */
-	createRuleEmbed(rule, tab = 'root_cause') {
+	showRule(rule, tab = 'root_cause') {
 		const sectionKey = tab === 'how_to_fix' ? 'how_to_fix' : 'root_cause';
 
 		const descriptionHTML = rule.descriptionSections.find(s => s.key === sectionKey)?.content ?? '';
@@ -214,7 +215,7 @@ module.exports = {
 		);
 
 		const container = new ContainerBuilder()
-			.setAccentColor(tabColors[tab] ?? 0x4A90D9)
+			.setAccentColor(tabColors[tab] ?? colors.info)
 			.addTextDisplayComponents(
 				(t) => t.setContent(`## 📖 ${rule.name}\n*${rule.key}*`),
 				(t) => t.setContent(

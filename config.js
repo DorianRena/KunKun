@@ -47,6 +47,10 @@ module.exports = {
 			MINOR: 0xFFD700,
 			INFO: 0x3b6885,
 		},
+		ruleTabs: {
+			root_cause: 0x3b6885,
+			how_to_fix: 0x00FF00,
+		},
 		error: 0xFF0000,
 		info: 0x3b6885,
 		log: 0x858585,

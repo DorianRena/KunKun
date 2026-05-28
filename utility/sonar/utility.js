@@ -1,5 +1,5 @@
 const sonarApi = require('./sonar-api');
-const { createRuleEmbed } = require('./interactive-report');
+const { showRule } = require('./interactive-report');
 
 const utils = {
 	async showRule(ruleKey, interaction, tab = 'root_cause') {
@@ -9,8 +9,8 @@ const utils = {
 				await interaction.editReply({ content: '❌ Règle introuvable', embeds: [], components: [] });
 				return;
 			}
-			const { embed, row } = createRuleEmbed(rule, tab);
-			await interaction.editReply({ embeds: [embed], components: [row] });
+			const { container, flags } = showRule(rule, tab);
+			await interaction.editReply({ components: [container], flags: flags });
 		}
 		catch (err) {
 			console.error('[Sonar] Rule tab error:', err.message);
