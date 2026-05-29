@@ -17,7 +17,7 @@ Chaque analyse produit un rapport interactif dans Discord (menus déroulants, bo
 
 ## Prérequis
 
-- [Node.js](https://nodejs.org/) v18+
+- [Node.js](https://nodejs.org/) v22.12.0+
 - [npm](https://www.npmjs.com/)
 - [Docker](https://www.docker.com/) (avec le daemon actif)
 
