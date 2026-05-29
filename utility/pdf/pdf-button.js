@@ -101,10 +101,10 @@ async function sendWithPdfButton(interaction, report, components) {
 	const collector = message.createMessageComponentCollector({
 		componentType: ComponentType.Button,
 		filter: (i) => i.customId === 'download_pdf_report',
-		time: COLLECTOR_TIMEOUT_MS,
 	});
 
 	collector.on('collect', async (buttonInteraction) => {
+		console.log('[PFD Buton] Getting pdf report...');
 		try {
 			const pdfBuffer = await readPdfFromVolume(report.volumeName, report.filename);
 			const attachment = new AttachmentBuilder(pdfBuffer, { name: report.filename });
