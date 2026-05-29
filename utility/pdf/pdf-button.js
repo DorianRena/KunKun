@@ -105,21 +105,20 @@ async function sendWithPdfButton(interaction, report, components) {
 
 	collector.on('collect', async (buttonInteraction) => {
 		console.log('[PFD Buton] Getting pdf report...');
+		buttonInteraction.deferReply({ flags: MessageFlags.Ephemeral });
 		try {
 			const pdfBuffer = await readPdfFromVolume(report.volumeName, report.filename);
 			const attachment = new AttachmentBuilder(pdfBuffer, { name: report.filename });
 
-			await buttonInteraction.reply({
+			await buttonInteraction.editReply({
 				content: `📄 Voici votre rapport : **${report.filename}**`,
 				files: [attachment],
-				flags: MessageFlags.Ephemeral,
 			});
 		}
 		catch (err) {
 			console.error('[Sonar][Report] Failed to serve PDF on button click:', err.message);
-			await buttonInteraction.reply({
+			await buttonInteraction.editReply({
 				content: '❌ Impossible de lire le rapport PDF. Il a peut-être expiré.',
-				flags: MessageFlags.Ephemeral,
 			});
 		}
 	});
