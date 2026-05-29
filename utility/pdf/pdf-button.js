@@ -9,7 +9,7 @@ const {
 const Docker = require('dockerode');
 
 const docker = new Docker();
-const COLLECTOR_TIMEOUT_MS = 5 * 60 * 1000;
+const COLLECTOR_TIMEOUT_MS = 240 * 60 * 1000;
 
 // Lit le PDF depuis le volume Docker et renvoie un Buffer.
 // On liste d'abord les fichiers pour trouver le PDF réel, puis on le lit.
