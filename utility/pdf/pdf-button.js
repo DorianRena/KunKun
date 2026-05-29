@@ -124,18 +124,18 @@ async function sendWithPdfButton(interaction, report, components) {
 		}
 	});
 
-	collector.on('end', async () => {
-		await removeVolume(report.volumeName);
+	/*	collector.on('end', async () => {
+			await removeVolume(report.volumeName);
 
-		const disabledButton = ButtonBuilder.from(button).setDisabled(true);
-		const disabledRow = new ActionRowBuilder().addComponents(disabledButton);
-		try {
-			await interaction.editReply({ components: [disabledRow] });
-		}
-		catch {
-			// Message supprimé ou interaction expirée
-		}
-	});
+			const disabledButton = ButtonBuilder.from(button).setDisabled(true);
+			const disabledRow = new ActionRowBuilder().addComponents(disabledButton);
+			try {
+				await interaction.editReply({ components: [disabledRow] });
+			}
+			catch {
+				// Message supprimé ou interaction expirée
+			}
+		});*/
 }
 
 module.exports = { sendWithPdfButton };
