@@ -1,7 +1,7 @@
 const { sonarAnalyse } = require('../docker/sonar-analyse');
 const sonarApi = require('./sonar-api');
 const { createInteractiveReport } = require('./interactive-report');
-const { generateSonarReport } = require('./sonar-report-generator');
+const { generateSonarReport } = require('../docker/sonar-report-generator');
 const { MessageFlags } = require('discord.js');
 const { containerInfoMessage } = require('../discord');
 const { colors } = require('../../config.js');
