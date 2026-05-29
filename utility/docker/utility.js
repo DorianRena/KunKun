@@ -60,7 +60,9 @@ const util = {
 						docker.modem.followProgress(
 							stream,
 							(err, res) => {
-								if (err) { reject(err); }
+								if (err) {
+									reject(err);
+								}
 								else {
 									console.info(`[Docker] Image ${imageName} built successfully`);
 									resolve(res);
@@ -226,6 +228,7 @@ const util = {
 		await util.ensureImage('sonarsource/sonar-scanner-cli');
 		await util.ensureImage('trufflesecurity/trufflehog');
 		await util.ensureImage('alpine:latest');
+		await util.ensureImage('alpine/git:latest');
 		await util.ensureBuiltImage('eclipse-temurin-cnes:latest', './tools/eclipse-temurin-cnes');
 		await util.ensureBuiltImage('python-reportlab:latest', './tools/python-reportlab');
 
