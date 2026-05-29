@@ -3,58 +3,66 @@
  * Regroupe toutes les variables d'environnement avec leurs valeurs par défaut
  */
 
-module.exports = {
-	// Discord Configuration
+const COLORS = {
+	severity: {
+		BLOCKER: 0xFF0000,
+		CRITICAL: 0xFF4500,
+		MAJOR: 0xFFA500,
+		MINOR: 0xFFD700,
+		INFO: 0x3b6885,
+	},
+	error: 0xFF0000,
+	info: 0x3b6885,
+	log: 0x858585,
+	warning: 0xFFA500,
+	good: 0x00FF00,
+};
+
+COLORS.ruleTabs = {
+	root_cause: COLORS.info,
+	how_to_fix: COLORS.good,
+};
+
+const config = {
 	discord: {
 		token: process.env.DISCORD_TOKEN,
 	},
-
-	// SonarQube Server Configuration
 	sonar: {
 		scanner: {
-			// Host URL for the scanner (inside Docker, use container name by default)
-			hostUrl: process.env.SONAR_HOST_URL,
-			// Authentication token for Sonar analysis
 			token: process.env.SONAR_TOKEN,
 		},
 	},
 	docker: {
 		stopContainersOnShutdown: process.env.DOCKER_STOP_CONTAINERS_ON_SHUTDOWN !== 'false',
 	},
-	/**
-	 * Validate required configuration
-	 * @throws {Error} If required env vars are missing
-	 */
-	validate() {
-		if (!this.discord.token) {
-			throw new Error('Missing required env var: DISCORD_TOKEN');
-		}
-		if (!this.sonar.scanner.token) {
-			throw new Error('Missing required env var: SONAR_TOKEN');
-		}
-	},
 	github: {
-		token: process.env.GITHUB_TOKEN || null,
+		token: process.env.GITHUB_TOKEN,
 	},
 	gitlab: {
-		token: process.env.GITLAB_TOKEN || null,
+		token: process.env.GITLAB_TOKEN,
 	},
-	colors: {
-		severity: {
-			BLOCKER: 0xFF0000,
-			CRITICAL: 0xFF4500,
-			MAJOR: 0xFFA500,
-			MINOR: 0xFFD700,
-			INFO: 0x3b6885,
-		},
-		ruleTabs: {
-			root_cause: 0x3b6885,
-			how_to_fix: 0x00FF00,
-		},
-		error: 0xFF0000,
-		info: 0x3b6885,
-		log: 0x858585,
-		warning: 0xFFA500,
-		good: 0x00FF00,
-	},
+	colors: COLORS,
 };
+
+function validate() {
+	const required = [
+		['DISCORD_TOKEN', config.discord.token],
+	];
+
+	const missing = required.filter(([, value]) => !value).map(([name]) => name);
+	if (missing.length) {
+		throw new Error(`Missing required env vars: ${missing.join(', ')}`);
+	}
+
+	if (!config.sonar.scanner.token) {
+		console.warn('[Config] Warning: SONAR_TOKEN is missing. SonarQube analysis will be unavailable');
+	}
+
+	if (!config.github.token && !config.gitlab.token) {
+		console.warn('[Config] Warning: Neither GITHUB_TOKEN nor GITLAB_TOKEN is set. Pipeline analysis will be unavailable.');
+	}
+}
+
+config.validate = validate;
+
+module.exports = config;
