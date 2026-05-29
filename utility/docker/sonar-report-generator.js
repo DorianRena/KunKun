@@ -13,6 +13,10 @@ module.exports = {
 		const cmd = [
 			'java',
 			'-jar', '/src/sonar-cnes-report.jar',
+			'--disable-markdown',
+			'--disable-report',
+			'--disable-spreadsheet',
+			'--disable-conf',
 			'-s', sonarHost,
 			'-t', sonarToken,
 			'-p', projectKey,
